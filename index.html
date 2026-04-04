@@ -140,14 +140,13 @@ function onEachFeature(feature, layer){
     var html = row ? `
       <div style="font-size:13px; line-height:1.3; background-color:#ffdee1; padding:3px; border-radius:4px;">
         <strong>${row.District}</strong><br>
-        Area: ${row['Cultivated area (Acres)']} Acre<br>
+        Cultivated area: ${row['Cultivated area (Acres)']} Acre<br>
         Yield: ${row['Yield rate (m. ton) per acre']} ton/acre<br>
         Expenditure: ${row['Expenditure per acre in Tk.']} Tk<br>
         Price of produced crops: ${row['Price of produced crops per acre (Tk.)']} Tk<br>
         Price of by-products: ${row['Price of by- products per acre (Tk.)']} Tk<br>
         Profit: ${row['Profit per acre (Tk./acre)']} Tk<br>
         Total production: ${row['Total production (m. ton)']} ton<br>
-        Crop share: ${row['Crop share (m. ton/acre)']} ton/acre
       </div>` : feature.properties.adm2_name;
     layer.bindTooltip(html,{sticky:true,direction:'auto',opacity:1}).openTooltip();
   });
@@ -155,7 +154,7 @@ function onEachFeature(feature, layer){
 
   layer.on('click', function(){
     if(selectedLayer) geoLayer.resetStyle(selectedLayer);
-    layer.setStyle({color:'red', weight:3, fillOpacity:0.8});
+    layer.setStyle({color:'blue', weight:3, fillOpacity:0.8});
     layer.bringToFront();
     selectedLayer = layer;
   });
