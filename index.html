@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Crops Dashboard</title>
+<title>Seasonal Crops Dashboard</title>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -19,16 +19,33 @@ html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif;}
   box-shadow:0 2px 6px rgba(0,0,0,0.2);
 }
 
-#topbar h2{margin:0;font-size:20px;}
+#topbar h2{
+  margin:0;
+  font-size:20px;
+}
 
 #dropdowns{
   margin-top:5px;
-  display:flex;gap:8px;justify-content:center;
+  display:flex;
+  gap:8px;
+  justify-content:center;
 }
 
 #dropdowns select{padding:5px;}
 
-#map{width:100%;height:100%;}
+#map{
+  width:100%;
+  height:100%;
+}
+
+/* Labels */
+.label{
+  font-family:"Times New Roman", serif;
+  font-size:12.5px;
+  color:#000;
+  text-shadow:1px 1px 2px #fff;
+  pointer-events:none;
+}
 
 /* Pink popup */
 .leaflet-popup-content-wrapper{
@@ -39,12 +56,15 @@ html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif;}
   background:#ffe6ea;
 }
 
-/* Labels */
-.label{
-  font-weight:bold;
-  color:#000;
-  text-shadow:1px 1px 2px #fff;
-  pointer-events:none;
+/* Footer */
+#footer{
+  position:absolute;
+  bottom:5px;
+  width:100%;
+  text-align:center;
+  font-size:13px;
+  background:rgba(255,255,255,0.8);
+  padding:4px;
 }
 </style>
 </head>
@@ -52,7 +72,7 @@ html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif;}
 <body>
 
 <div id="topbar">
-  <h2>Crops Dashboard</h2>
+  <h2>Seasonal Crops Production, Expenditure, and Profit in Bangladesh</h2>
   <div id="dropdowns">
     <select id="cropSelect">
       <option>Local Boro</option>
@@ -75,21 +95,28 @@ html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif;}
 
 <div id="map"></div>
 
+<div id="footer">
+  Data Source: 
+  <a href="https://objectstorage.ap-dcc-gazipur-1.oraclecloud15.com/n/axvjbnqprylg/b/V2Ministry/o/office-bbs/2024/12/c303b53b29864763ae8cf174fdb57a44.pdf" target="_blank">
+    Agriculture Sample Census-2020
+  </a> |
+  © <a href="https://www.linkedin.com/in/md-sumon-ali-992b91214/" target="_blank">
+    Sumon
+  </a>
+</div>
+
 <script>
 // -------------------------
-// Map init
-var map = L.map('map', { zoomControl:false }).setView([23.7,90.4],6);
-
-// Zoom inside map
+var map = L.map('map',{zoomControl:false}).setView([23.7,90.4],6);
 L.control.zoom({position:'bottomleft'}).addTo(map);
 
-// Light basemap
+// Light basemap (clear)
 var baseMap = L.tileLayer.provider('CartoDB.Positron').addTo(map);
 
 // Satellite
 var satelliteMap = L.tileLayer.provider('Esri.WorldImagery');
 
-// Layer control
+// Layer control (INSIDE MAP)
 L.control.layers(
   {"Light Map": baseMap, "Satellite": satelliteMap},
   null,
@@ -97,18 +124,17 @@ L.control.layers(
 ).addTo(map);
 
 // -------------------------
-var geojsonLayer, dataIndex={}, labelLayer=L.layerGroup().addTo(map);
+var geojsonLayer,dataIndex={},labelLayer=L.layerGroup().addTo(map);
 
 var CSV_URL="https://docs.google.com/spreadsheets/d/1lnnKF_oigj3TQl_N9BfIJJwviHktt3LzyW4UDMjHvxQ/gviz/tq?tqx=out:csv&gid=822582774";
 
 // -------------------------
-// Load data
 Papa.parse(CSV_URL,{
   download:true,header:true,skipEmptyLines:true,
   complete:function(res){
     res.data.forEach(d=>{
-      var dist=d.District?.trim().toLowerCase();
-      var crop=d['Crops Name'];
+      let dist=d.District?.trim().toLowerCase();
+      let crop=d['Crops Name'];
       if(!dataIndex[dist]) dataIndex[dist]={};
       dataIndex[dist][crop]=d;
     });
@@ -131,11 +157,10 @@ function loadGeo(){
 }
 
 // -------------------------
-// Smooth color
-function getColor(val,arr){
+function getColor(v,arr){
   if(!arr.length) return '#ccc';
-  let min=Math.min(...arr), max=Math.max(...arr);
-  return chroma.scale(['red','yellow','green']).domain([min,max])(val).hex();
+  let min=Math.min(...arr),max=Math.max(...arr);
+  return chroma.scale(['red','yellow','green']).domain([min,max])(v).hex();
 }
 
 // -------------------------
@@ -153,7 +178,6 @@ function styleDistrict(f){
 }
 
 // -------------------------
-// Popup
 function onEachFeature(f,l){
   l.on('click',e=>{
     let crop=cropSelect.value;
@@ -165,11 +189,8 @@ function onEachFeature(f,l){
       Area: ${row['Cultivated area (Acres)']} Acre<br>
       Yield: ${row['Yield rate (m. ton) per acre']} ton/acre<br>
       Expenditure: Tk ${row['Expenditure per acre in Tk.']}<br>
-      Crop Price: Tk ${row['Price of produced crops per acre (Tk.)']}<br>
-      By-product: Tk ${row['Price of by- products per acre (Tk.)']}<br>
       Profit: Tk ${row['Profit per acre (Tk./acre)']}<br>
-      Production: ${row['Total production (m. ton)']} ton<br>
-      Share: ${row['Crop share (m. ton/acre)']} ton/acre
+      Production: ${row['Total production (m. ton)']} ton
     `:`<b>${f.properties.adm2_name}</b><br>No data`;
 
     L.popup().setLatLng(e.latlng).setContent(html).openOn(map);
@@ -177,7 +198,6 @@ function onEachFeature(f,l){
 }
 
 // -------------------------
-// Labels
 function addLabels(g){
   labelLayer.clearLayers();
 
@@ -187,7 +207,7 @@ function addLabels(g){
 
     let icon=L.divIcon({
       className:'label',
-      html:`<span>${name}</span>`
+      html:`${name}`
     });
 
     L.marker([center[1],center[0]],{icon}).addTo(labelLayer);
@@ -200,14 +220,6 @@ function getCenter(c){
   c[0].forEach(pt=>{x+=pt[0];y+=pt[1];n++;});
   return [x/n,y/n];
 }
-
-// scale label
-map.on('zoomend',()=>{
-  let size=map.getZoom()*2;
-  document.querySelectorAll('.label span').forEach(el=>{
-    el.style.fontSize=size+'px';
-  });
-});
 
 // -------------------------
 cropSelect.onchange=update;
