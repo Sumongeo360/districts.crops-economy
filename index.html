@@ -37,16 +37,8 @@ html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif;}
 <div id="topContainer">
   <div id="titleRow">Crops Dashboard</div>
   <div id="filterRow">
-    <select id="cropSelect">
-      <option>Local Boro</option>
-      <option>Local Bona Aus</option>
-      <option>Local Ropa Aman</option>
-    </select>
-    <select id="metricSelect">
-      <option value="Total production (m. ton)">Total Production</option>
-      <option value="Profit per acre (Tk./acre)">Profit per Acre</option>
-      <option value="Crop share (m. ton/acre)">Crop Share</option>
-    </select>
+    <select id="cropSelect"><option>Loading crops...</option></select>
+    <select id="metricSelect"><option>Loading metrics...</option></select>
   </div>
 </div>
 
@@ -63,25 +55,47 @@ L.control.layers({ "Satellite": satelliteMap, "Base": baseMap }, null, { positio
 
 // Globals
 var geojsonLayer, dataIndex = {};
-const CSV_URL = "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/gviz/tq?tqx=out:csv&gid=822582774";
+const CSV_URL = "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/gviz/tq?tqx=out:csv&gid=0"; // Replace with your Sheet ID and gid
+const cropSelect = document.getElementById('cropSelect');
+const metricSelect = document.getElementById('metricSelect');
 
 // Load CSV
 Papa.parse(CSV_URL,{
   download:true, header:true, skipEmptyLines:true,
   complete:function(results){
+    const headers = results.meta.fields;
+
+    // Populate metric dropdown dynamically
+    metricSelect.innerHTML = '';
+    headers.filter(h => h !== 'Crops Name' && h !== 'District').forEach(h=>{
+      const opt = document.createElement('option');
+      opt.value = h; opt.textContent = h;
+      metricSelect.appendChild(opt);
+    });
+
+    // Populate crop dropdown dynamically
+    const cropSet = new Set(results.data.map(d=>d['Crops Name']).filter(Boolean));
+    cropSelect.innerHTML='';
+    cropSet.forEach(c=>{
+      const opt = document.createElement('option');
+      opt.value=c; opt.textContent=c;
+      cropSelect.appendChild(opt);
+    });
+
     results.data.forEach(d => {
       const district = d.District?.trim().toLowerCase();
       const crop = d['Crops Name'];
       if(!dataIndex[district]) dataIndex[district]={};
       dataIndex[district][crop] = d;
     });
+
     loadGeoJSON();
   }
 });
 
 // Load GeoJSON
 function loadGeoJSON(){
-  fetch('districts.geojson')
+  fetch('districts.geojson') // replace with your geojson path
     .then(r => r.json())
     .then(geojson => {
       geojsonLayer = L.geoJSON(geojson, {
@@ -89,7 +103,7 @@ function loadGeoJSON(){
         onEachFeature: onEachFeature
       }).addTo(map);
 
-      // Add labels
+      // Add district labels
       geojsonLayer.eachLayer(layer=>{
         const center = layer.getBounds().getCenter();
         L.marker(center,{icon:L.divIcon({
@@ -100,7 +114,7 @@ function loadGeoJSON(){
     });
 }
 
-// Calculate percentile color
+// Percentile color function
 function getPercentileColor(value, allValues){
   allValues.sort((a,b)=>a-b);
   const idx = allValues.findIndex(v=>v>=value);
@@ -110,10 +124,10 @@ function getPercentileColor(value, allValues){
   return `rgb(${r},${g},0)`;
 }
 
-// Style districts
+// Style function
 function styleDistrict(feature){
-  const crop = document.getElementById('cropSelect').value;
-  const metric = document.getElementById('metricSelect').value;
+  const crop = cropSelect.value;
+  const metric = metricSelect.value;
   const district = feature.properties.adm2_name?.trim().toLowerCase();
   const row = dataIndex[district]?.[crop];
   let value = row ? parseFloat(row[metric])||0 : 0;
@@ -124,28 +138,26 @@ function styleDistrict(feature){
   return { fillColor: fillColor, weight:1, color:'white', fillOpacity:0.7 };
 }
 
-// Tooltip
+// Tooltip on hover
 function onEachFeature(feature, layer){
   layer.on('mouseover', e=>{
-    const crop = document.getElementById('cropSelect').value;
+    const crop = cropSelect.value;
     const district = feature.properties.adm2_name?.trim().toLowerCase();
     const row = dataIndex[district]?.[crop];
     let content = `<b>${feature.properties.adm2_name}</b><br>No data`;
     if(row){
-      content=`<b>${row.District}</b><br>
-      Area: ${row['Cultivated area (Acres)']} Acres<br>
-      Yield: ${row['Yield rate (m. ton) per acre']}<br>
-      Profit: Tk. ${row['Profit per acre (Tk./acre)']}<br>
-      Production: ${row['Total production (m. ton)']}`;
+      content=`<b>${row.District}</b><br>`;
+      Object.keys(row).filter(k=>k!=='District' && k!=='Crops Name').forEach(k=>{
+        content+=`${k}: ${row[k]}<br>`;
+      });
     }
     layer.bindTooltip(content,{sticky:true}).openTooltip();
   });
 }
 
-// Update map when dropdown changes
-document.getElementById('cropSelect').addEventListener('change', updateMap);
-document.getElementById('metricSelect').addEventListener('change', updateMap);
-
+// Update map on dropdown change
+cropSelect.addEventListener('change', updateMap);
+metricSelect.addEventListener('change', updateMap);
 function updateMap(){
   if(!geojsonLayer) return;
   geojsonLayer.eachLayer(layer=>layer.setStyle(styleDistrict(layer.feature)));
