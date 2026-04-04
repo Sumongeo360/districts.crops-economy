@@ -3,26 +3,33 @@
 <head>
 <meta charset="UTF-8">
 <title>Seasonal Crops Production Expenditure and Profit in Bangladesh</title>
-
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet-providers/leaflet-providers.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
 <style>
-html, body { margin:0; padding:0; height:100%; font-family:'Times New Roman', serif; }
-body { display:flex; flex-direction:column; height:100vh; }
-#topbar { flex:0 0 10%; display:flex; flex-direction:column; justify-content:center; align-items:center; background:rgba(255,255,255,0.95); padding:2px 5px; text-align:center; }
-#topbar h2 { margin:0; font-size:18px; color:red; }
-#dropdowns { margin-top:2px; display:flex; justify-content:center; gap:6px; }
-#dropdowns select { font-family:'Times New Roman'; font-size:14px; color:blue; padding:3px; }
-#mapRow { flex:1; position:relative; } /* Middle row for map */
-#map { width:100%; height:100%; }
-#sourceCredit { flex:0 0 2%; display:flex; justify-content:center; align-items:center; font-size:12px; text-align:center; }
-.district-label { font-family:'Times New Roman'; font-size:12.5px; text-align:center; pointer-events:none; }
+html, body {margin:0; padding:0; height:100%; font-family:'Times New Roman', serif;}
+#topbar {
+  height:10%; display:flex; flex-direction:column; justify-content:center; align-items:center;
+  background:rgba(255,255,255,0.95); text-align:center; padding:2px 5px;
+}
+#topbar h2 {margin:0; font-size:18px; color:red;}
+#dropdowns {margin-top:3px; display:flex; justify-content:center; gap:6px;}
+#dropdowns select {font-family:'Times New Roman'; font-size:14px; color:blue; padding:3px;}
+#mapContainer {height:88%; position:relative;}
+#map {width:100%; height:100%;}
+#sourceCredit {
+  height:2%; display:flex; justify-content:center; align-items:center; font-size:12px; text-align:center;
+}
+.district-label {font-family:'Times New Roman'; font-size:12.5px; text-align:center; pointer-events:none;}
+.legend {position:absolute; bottom:10px; left:10px; background:white; padding:6px; border-radius:4px; font-size:12px; line-height:1.2; box-shadow:0 0 4px rgba(0,0,0,0.3);}
+.legend-title {font-weight:bold; margin-bottom:4px;}
+.legend-item {display:flex; align-items:center; gap:4px;}
+.legend-color {width:15px; height:15px; display:inline-block;}
+.north-arrow {position:absolute; top:10px; left:10px; width:40px; height:40px; background:url('https://upload.wikimedia.org/wikipedia/commons/e/e0/North_arrow.svg') no-repeat center center; background-size:contain; z-index:1000;}
 </style>
 </head>
-
 <body>
 
 <div id="topbar">
@@ -33,8 +40,10 @@ body { display:flex; flex-direction:column; height:100vh; }
   </div>
 </div>
 
-<div id="mapRow">
+<div id="mapContainer">
   <div id="map"></div>
+  <div class="north-arrow"></div>
+  <div id="legend" class="legend"></div>
 </div>
 
 <div id="sourceCredit">
@@ -45,7 +54,7 @@ body { display:flex; flex-direction:column; height:100vh; }
 <script>
 var map = L.map('map',{zoomControl:true}).setView([23.7,90.4],6);
 
-// Google Base Map
+// Base & Satellite
 var baseLayer = L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {subdomains:['mt0','mt1','mt2','mt3']}).addTo(map);
 var satelliteLayer = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {subdomains:['mt0','mt1','mt2','mt3']});
 L.control.layers({"Base Map":baseLayer,"Satellite":satelliteLayer},{},{position:'topright'}).addTo(map);
@@ -66,9 +75,9 @@ const metrics=[
   "Total production (m. ton)",
   "Crop share (m. ton/acre)"
 ];
-metrics.forEach(m=>{ metricSelect.innerHTML += `<option value="${m}">${m}</option>`; });
+metrics.forEach(m=>metricSelect.innerHTML += `<option value="${m}">${m}</option>`);
 
-// Color gradient
+// Color scale
 function getColor(v){
   return v>1000?'#006400':v>500?'#32CD32':v>200?'#ADFF2F':v>100?'#FFFF00':v>50?'#FFA500':v>20?'#FF4500':'#FF0000';
 }
@@ -81,37 +90,34 @@ Papa.parse(CSV_URL,{download:true,header:true,skipEmptyLines:true,complete:funct
     if(!dataIndex[district]) dataIndex[district]={};
     dataIndex[district][crop] = d;
   });
-  // Populate crops dropdown
   let crops = [...new Set(results.data.map(d=>d['Crops Name']).filter(Boolean))].sort();
   cropSelect.innerHTML = crops.map(c=>`<option>${c}</option>`).join('');
   loadGeoJSON();
 }});
 
+// Load GeoJSON
 function loadGeoJSON(){
-  fetch('districts.geojson')
-    .then(r=>r.json())
-    .then(geojson=>{
-      geoLayer = L.geoJSON(geojson,{ style: styleDistrict, onEachFeature: onEachFeature }).addTo(map);
-
-      geoLayer.eachLayer(function(layer){
-        var center = layer.getBounds().getCenter();
-        L.marker(center,{icon:L.divIcon({className:'district-label',html:layer.feature.properties.adm2_name,iconAnchor:[0,0]})}).addTo(map);
-      });
-
-      // Ensure Leaflet knows the map div size after flex rendering
-      setTimeout(()=>{ map.invalidateSize(); },200);
+  fetch('districts.geojson').then(r=>r.json()).then(geojson=>{
+    geoLayer = L.geoJSON(geojson,{style:styleDistrict,onEachFeature:onEachFeature}).addTo(map);
+    geoLayer.eachLayer(layer=>{
+      var center = layer.getBounds().getCenter();
+      L.marker(center,{icon:L.divIcon({className:'district-label',html:layer.feature.properties.adm2_name,iconAnchor:[0,0]})}).addTo(map);
     });
+    updateLegend();
+  });
 }
 
+// Style function
 function styleDistrict(feature){
   var crop = cropSelect.value;
   var metric = metricSelect.value;
   var district = feature.properties.adm2_name?.trim().toLowerCase();
   var row = dataIndex[district]?.[crop];
-  var value = row ? parseFloat(row[metric]) || 0 : 0;
-  return { fillColor:getColor(value), weight:1, color:'white', fillOpacity:0.7 };
+  var value = row ? parseFloat(row[metric])||0 : 0;
+  return {fillColor:getColor(value), weight:1, color:'white', fillOpacity:0.7};
 }
 
+// Tooltip & click
 function onEachFeature(feature, layer){
   layer.on('mouseover', function(){
     var crop = cropSelect.value;
@@ -123,25 +129,39 @@ function onEachFeature(feature, layer){
         Area: ${row['Cultivated area (Acres)']} Acre<br>
         Yield: ${row['Yield rate (m. ton) per acre']} ton/acre<br>
         Expenditure: ${row['Expenditure per acre in Tk.']} Tk<br>
+        Price of produced crops: ${row['Price of produced crops per acre (Tk.)']} Tk<br>
+        Price of by-products: ${row['Price of by- products per acre (Tk.)']} Tk<br>
         Profit: ${row['Profit per acre (Tk./acre)']} Tk<br>
-        Production: ${row['Total production (m. ton)']} ton
+        Total production: ${row['Total production (m. ton)']} ton<br>
+        Crop share: ${row['Crop share (m. ton/acre)']} ton/acre
       </div>` : feature.properties.adm2_name;
     layer.bindTooltip(html,{sticky:true,direction:'auto',opacity:1}).openTooltip();
   });
-  layer.on('mouseout', function(){ layer.closeTooltip(); });
+  layer.on('mouseout',()=>layer.closeTooltip());
 
   layer.on('click', function(){
     if(selectedLayer) geoLayer.resetStyle(selectedLayer);
-    layer.setStyle({color:'blue', weight:3, fillOpacity:0.8});
+    layer.setStyle({color:'red', weight:3, fillOpacity:0.8});
     layer.bringToFront();
     selectedLayer = layer;
   });
 }
 
-// Update map on dropdown change
-cropSelect.addEventListener('change', ()=>{ geoLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature))); });
-metricSelect.addEventListener('change', ()=>{ geoLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature))); });
+// Dropdown change updates
+cropSelect.addEventListener('change',()=>{geoLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature))); updateLegend();});
+metricSelect.addEventListener('change',()=>{geoLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature))); updateLegend();});
 
+// Legend
+function updateLegend(){
+  var metric = metricSelect.value;
+  var colors = ['#FF0000','#FF4500','#FFA500','#FFFF00','#ADFF2F','#32CD32','#006400'];
+  var labels = ['Very Low','Low','Moderate','High','Very High','Excellent','Top'];
+  var legendHtml = `<div class="legend-title">Legend + ${metric}</div>`;
+  for(let i=0;i<5;i++){ // show 5
+    legendHtml += `<div class="legend-item"><span class="legend-color" style="background:${colors[i]}"></span>${labels[i]}</div>`;
+  }
+  document.getElementById('legend').innerHTML = legendHtml;
+}
 </script>
 </body>
 </html>
