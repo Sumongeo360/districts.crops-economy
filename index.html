@@ -4,29 +4,25 @@
 <meta charset="UTF-8">
 <title>Crops Dashboard</title>
 
-<!-- Leaflet CSS & JS -->
+<!-- Leaflet -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet-providers/leaflet-providers.js"></script>
-
-<!-- PapaParse for Google Sheet CSV -->
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
 <style>
 html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif;}
+#map{width:100%;height:100%;}
 #topbar{
   position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:1000;
   background:rgba(255,255,255,0.95);padding:10px 15px;border-radius:8px;
-  display:flex;flex-direction:column;align-items:center;box-shadow:0 2px 6px rgba(0,0,0,0.2);
+  display:flex;flex-direction:column;align-items:center;box-shadow:0 2px 6px rgba(0,0,0,0.3);
 }
-#topbar h2{margin:0 0 5px 0;font-size:18px;}
+#topbar h2{margin:0 0 5px 0;font-size:18px;color:#d32f2f;}
 #dropdowns{display:flex;gap:8px;}
-#dropdowns select{padding:5px;}
-#map{width:100%;height:100%;}
-#infoPanel{
-  position:absolute;bottom:10px;right:10px;z-index:1000;
-  background:rgba(255,255,255,0.95);padding:10px;border-radius:6px;width:230px;
-  box-shadow:0 2px 6px rgba(0,0,0,0.2);
+#dropdowns select{padding:5px;font-size:14px;}
+.leaflet-label{
+  font-weight:bold;color:#000;background:none;border:none;text-shadow:1px 1px 2px #fff;font-size:12px;
 }
 </style>
 </head>
@@ -51,34 +47,27 @@ html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif;}
 
 <div id="map"></div>
 
-<div id="infoPanel">
-  <h3>District Info</h3>
-  <div id="districtInfo">Click a district</div>
-</div>
-
 <script>
-// -------------------------
 // Map init
-var map = L.map('map', { zoomControl: true }).setView([23.7, 90.4], 6);
-L.control.zoom({ position: 'bottomleft' }).addTo(map);
+var map = L.map('map', { zoomControl: true }).setView([23.7,90.4], 6);
+L.control.zoom({ position:'bottomleft' }).addTo(map);
 
 // Base layers
-var baseMap = L.tileLayer.provider('OpenStreetMap.Mapnik').addTo(map);
-var satelliteMap = L.tileLayer.provider('Esri.WorldImagery');
-L.control.layers({ "Base": baseMap, "Satellite": satelliteMap }, null, { position: 'topright' }).addTo(map);
+var satelliteMap = L.tileLayer.provider('Esri.WorldImagery').addTo(map);
+var baseMap = L.tileLayer.provider('OpenStreetMap.Mapnik');
+L.control.layers({ "Satellite": satelliteMap, "Base": baseMap }, null, { position:'topright' }).addTo(map);
 
 // Globals
 var geojsonLayer, dataIndex = {};
-var CSV_URL = "https://docs.google.com/spreadsheets/d/1lnnKF_oigj3TQl_N9BfIJJwviHktt3LzyW4UDMjHvxQ/gviz/tq?tqx=out:csv&gid=822582774";
+const CSV_URL = "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/gviz/tq?tqx=out:csv&gid=822582774";
 
-// -------------------------
-// Load Google Sheet CSV
+// Load CSV
 Papa.parse(CSV_URL,{
   download:true, header:true, skipEmptyLines:true,
   complete:function(results){
     results.data.forEach(d => {
-      var district = d.District?.trim().toLowerCase();
-      var crop = d['Crops Name'];
+      const district = d.District?.trim().toLowerCase();
+      const crop = d['Crops Name'];
       if(!dataIndex[district]) dataIndex[district]={};
       dataIndex[district][crop] = d;
     });
@@ -86,7 +75,6 @@ Papa.parse(CSV_URL,{
   }
 });
 
-// -------------------------
 // Load GeoJSON
 function loadGeoJSON(){
   fetch('districts.geojson')
@@ -94,63 +82,70 @@ function loadGeoJSON(){
     .then(geojson => {
       geojsonLayer = L.geoJSON(geojson, {
         style: styleDistrict,
-        onEachFeature: onEachFeature
+        onEachFeature: onEachFeature,
+        pointToLayer: function(f,latlng){ return L.marker(latlng); }
       }).addTo(map);
+
+      // Add labels
+      geojsonLayer.eachLayer(layer=>{
+        const center = layer.getBounds().getCenter();
+        L.marker(center,{icon:L.divIcon({
+          className:'leaflet-label',
+          html: layer.feature.properties.adm2_name
+        })}).addTo(map);
+      });
     });
 }
 
-// -------------------------
-// Color scale
-function getColor(v){
-  return v > 1000 ? '#084081' :
-         v > 500  ? '#0868ac' :
-         v > 200  ? '#2b8cbe' :
-         v > 100  ? '#4eb3d3' :
-         v > 50   ? '#7bccc4' :
-         v > 20   ? '#a8ddb5' :
-                    '#ccebc5';
+// Calculate percentile color
+function getPercentileColor(value, allValues){
+  allValues.sort((a,b)=>a-b);
+  const idx = allValues.findIndex(v=>v>=value);
+  const perc = idx/allValues.length;
+  const r = Math.floor(255*(1-perc));
+  const g = Math.floor(255*perc);
+  return `rgb(${r},${g},0)`;
 }
 
-// -------------------------
 // Style districts
 function styleDistrict(feature){
-  var crop = document.getElementById('cropSelect').value;
-  var metric = document.getElementById('metricSelect').value;
-  var district = feature.properties.adm2_name?.trim().toLowerCase();
-  var row = dataIndex[district]?.[crop];
-  var value = row ? parseFloat(row[metric]) || 0 : 0;
+  const crop = document.getElementById('cropSelect').value;
+  const metric = document.getElementById('metricSelect').value;
+  const district = feature.properties.adm2_name?.trim().toLowerCase();
+  const row = dataIndex[district]?.[crop];
+  let value = row ? parseFloat(row[metric])||0 : 0;
 
-  return { fillColor: getColor(value), weight:1, color:'white', fillOpacity:0.7 };
+  // Compute percentile color
+  const allValues = Object.values(dataIndex).map(d=>d[crop]?parseFloat(d[crop][metric]||0):0);
+  const fillColor = getPercentileColor(value, allValues);
+
+  return { fillColor: fillColor, weight:1, color:'white', fillOpacity:0.7 };
 }
 
-// -------------------------
-// Click info
+// Tooltip
 function onEachFeature(feature, layer){
-  layer.on('click', function(){
-    var crop = document.getElementById('cropSelect').value;
-    var district = feature.properties.adm2_name?.trim().toLowerCase();
-    var row = dataIndex[district]?.[crop];
+  layer.on('mouseover', e=>{
+    const crop = document.getElementById('cropSelect').value;
+    const district = feature.properties.adm2_name?.trim().toLowerCase();
+    const row = dataIndex[district]?.[crop];
+    let content = `<b>${feature.properties.adm2_name}</b><br>No data`;
     if(row){
-      document.getElementById('districtInfo').innerHTML = `
-        <b>${row.District}</b><br>
-        Area: ${row['Cultivated area (Acres)']} Acres<br>
-        Yield: ${row['Yield rate (m. ton) per acre']}<br>
-        Profit: Tk. ${row['Profit per acre (Tk./acre)']}<br>
-        Production: ${row['Total production (m. ton)']}
-      `;
-    } else {
-      document.getElementById('districtInfo').innerHTML = `<b>${feature.properties.adm2_name}</b><br>No data`;
+      content=`<b>${row.District}</b><br>
+      Area: ${row['Cultivated area (Acres)']} Acres<br>
+      Yield: ${row['Yield rate (m. ton) per acre']}<br>
+      Profit: Tk. ${row['Profit per acre (Tk./acre)']}<br>
+      Production: ${row['Total production (m. ton)']}`;
     }
+    layer.bindTooltip(content,{sticky:true}).openTooltip();
   });
 }
 
-// -------------------------
 // Update map on dropdown change
 document.getElementById('cropSelect').addEventListener('change', updateMap);
 document.getElementById('metricSelect').addEventListener('change', updateMap);
 
 function updateMap(){
-  geojsonLayer.eachLayer(layer => { layer.setStyle(styleDistrict(layer.feature)); });
+  geojsonLayer.eachLayer(layer=>layer.setStyle(styleDistrict(layer.feature)));
 }
 </script>
 
