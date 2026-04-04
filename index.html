@@ -9,26 +9,22 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet-providers/leaflet-providers.js"></script>
 
-<!-- PapaParse for Google Sheet CSV -->
+<!-- PapaParse & Chroma.js -->
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chroma-js@2.4.2/chroma.min.js"></script>
 
 <style>
-html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif;}
-#topbar{
-  position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:1000;
-  background:rgba(255,255,255,0.95);padding:10px 15px;border-radius:8px;
-  display:flex;flex-direction:column;align-items:center;box-shadow:0 2px 6px rgba(0,0,0,0.2);
+html, body {margin:0; padding:0; height:100%; font-family: Arial, sans-serif;}
+#topbar {
+  position:absolute; top:0; left:0; width:100%; z-index:1000;
+  background: rgba(255,255,255,0.95); padding:10px 15px; 
+  display:flex; flex-direction: column; align-items: center; box-shadow:0 2px 6px rgba(0,0,0,0.2);
 }
-#topbar h2{margin:0 0 5px 0;font-size:18px;}
-#dropdowns{display:flex;gap:8px;}
-#dropdowns select{padding:5px;}
-#map{width:100%;height:100%;}
-#infoPanel{
-  position:absolute;bottom:10px;right:10px;z-index:1000;
-  background:rgba(255,255,255,0.95);padding:10px;border-radius:6px;width:250px;
-  box-shadow:0 2px 6px rgba(0,0,0,0.2);
-}
+#topbar h2 {margin:0 0 5px 0; font-size:22px; text-align:center; width:100%;}
+#dropdowns {display:flex; gap:8px; margin-bottom:5px;}
+#dropdowns select {padding:5px; font-size:14px;}
+#map {width:100%; height:100%;}
+.leaflet-label {font-weight:bold; pointer-events:none; text-align:center;}
 </style>
 </head>
 
@@ -58,24 +54,19 @@ html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif;}
 
 <div id="map"></div>
 
-<div id="infoPanel">
-  <h3>District Info</h3>
-  <div id="districtInfo">Click a district</div>
-</div>
-
 <script>
 // -------------------------
 // Map init
 var map = L.map('map', { zoomControl: true }).setView([23.7, 90.4], 6);
 L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
-// Base layers
-var baseMap = L.tileLayer.provider('OpenStreetMap.Mapnik').addTo(map);
+// Clean basemap with no labels
+var baseMap = L.tileLayer.provider('CartoDB.DarkMatterNoLabels').addTo(map);
 var satelliteMap = L.tileLayer.provider('Esri.WorldImagery');
 L.control.layers({ "Base": baseMap, "Satellite": satelliteMap }, null, { position: 'topright' }).addTo(map);
 
 // Globals
-var geojsonLayer, dataIndex = {};
+var geojsonLayer, dataIndex = {}, labelsLayer = L.layerGroup().addTo(map);
 var CSV_URL = "https://docs.google.com/spreadsheets/d/1lnnKF_oigj3TQl_N9BfIJJwviHktt3LzyW4UDMjHvxQ/gviz/tq?tqx=out:csv&gid=822582774";
 
 // -------------------------
@@ -103,6 +94,7 @@ function loadGeoJSON(){
         style: styleDistrict,
         onEachFeature: onEachFeature
       }).addTo(map);
+      addLabels(geojson);
     });
 }
 
@@ -121,37 +113,70 @@ function styleDistrict(feature){
   var metric = document.getElementById('metricSelect').value;
   var district = feature.properties.adm2_name?.trim().toLowerCase();
   var row = dataIndex[district]?.[crop];
-  
-  // Collect all values for percentile
   var allVals = Object.values(dataIndex).map(d=>d[crop]?.[metric]).filter(v=>v).map(v=>parseFloat(v));
   var value = row ? parseFloat(row[metric]) || 0 : 0;
-  
   return { fillColor: getColor(value, allVals), weight:1, color:'white', fillOpacity:0.7 };
 }
 
 // -------------------------
-// Click info
+// Add district labels
+function addLabels(geojson){
+  labelsLayer.clearLayers();
+  geojson.features.forEach(f => {
+    var center = f.geometry.type === "Polygon" ? centroid(f.geometry.coordinates) : [0,0];
+    var text = f.properties.adm2_name;
+    var label = L.divIcon({
+      className:'leaflet-label',
+      html:`<span style="font-size:${map.getZoom()*2}px">${text}</span>`,
+      iconSize: [100,20]
+    });
+    var marker = L.marker([center[1], center[0]], {icon: label}).addTo(labelsLayer);
+  });
+}
+
+// Update label size on zoom
+map.on('zoomend', function(){
+  labelsLayer.eachLayer(l => {
+    l.getElement().style.fontSize = (map.getZoom()*2)+'px';
+  });
+});
+
+// -------------------------
+// Click info floating tooltip
 function onEachFeature(feature, layer){
-  layer.on('click', function(){
+  layer.on('click', function(e){
     var crop = document.getElementById('cropSelect').value;
     var district = feature.properties.adm2_name?.trim().toLowerCase();
     var row = dataIndex[district]?.[crop];
+    var content = '';
     if(row){
-      document.getElementById('districtInfo').innerHTML = `
+      content = `
         <b>${row.District}</b><br>
         Area: ${row['Cultivated area (Acres)']} Acres<br>
         Yield: ${row['Yield rate (m. ton) per acre']}<br>
         Expenditure: Tk. ${row['Expenditure per acre in Tk.']}<br>
-        Price of Crop: Tk. ${row['Price of produced crops per acre (Tk.)']}<br>
-        Price of By-product: Tk. ${row['Price of by- products per acre (Tk.)']}<br>
+        Price: Tk. ${row['Price of produced crops per acre (Tk.)']}<br>
+        By-products: Tk. ${row['Price of by- products per acre (Tk.)']}<br>
         Profit: Tk. ${row['Profit per acre (Tk./acre)']}<br>
         Production: ${row['Total production (m. ton)']}<br>
         Crop Share: ${row['Crop share (m. ton/acre)']}
       `;
     } else {
-      document.getElementById('districtInfo').innerHTML = `<b>${feature.properties.adm2_name}</b><br>No data`;
+      content = `<b>${feature.properties.adm2_name}</b><br>No data`;
     }
+    L.popup({offset:L.point(0,-5), autoPan:true})
+      .setLatLng(e.latlng)
+      .setContent(content)
+      .openOn(map);
   });
+}
+
+// -------------------------
+// Simple centroid function
+function centroid(coords){
+  var x=0,y=0,count=0;
+  coords[0].forEach(c => {x+=c[0]; y+=c[1]; count++;});
+  return [x/count, y/count];
 }
 
 // -------------------------
