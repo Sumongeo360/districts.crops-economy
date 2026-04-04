@@ -146,7 +146,7 @@ function onEachFeature(feature, layer){
 
   layer.on('click', function(){
     if(selectedLayer) geoLayer.resetStyle(selectedLayer);
-    layer.setStyle({color:'red', weight:3, fillOpacity:0.8});
+    layer.setStyle({color:'blue', weight:3, fillOpacity:0.8});
     layer.bringToFront();
     selectedLayer = layer;
   });
@@ -175,7 +175,7 @@ function updateLegend(){
   let ranges = computeRanges(metric);
   let colors = ['#FF0000','#FF4500','#FFA500','#FFFF00','#32CD32'];
   let labels = ['Very Low','Low','Moderate','High','Very High'];
-  let legendHtml = `<div class="legend-title">Legend + ${metric}</div>`;
+  let legendHtml = `<div class="legend-title">Legend ${metric}</div>`;
   for(let i=0;i<5;i++){
     let rangeText = i===0?`${ranges[i].toFixed(0)}`:
                     i===4?`${ranges[i-1].toFixed(0)}-${ranges[i].toFixed(0)}`:
