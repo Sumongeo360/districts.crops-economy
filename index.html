@@ -23,11 +23,20 @@ html, body {margin:0; padding:0; height:100%; font-family:'Times New Roman', ser
   height:2%; display:flex; justify-content:center; align-items:center; font-size:12px; text-align:center;
 }
 .district-label {font-family:'Times New Roman'; font-size:12.5px; text-align:center; pointer-events:none;}
-.legend {position:absolute; bottom:10px; left:10px; background:white; padding:6px; border-radius:4px; font-size:12px; line-height:1.2; box-shadow:0 0 4px rgba(0,0,0,0.3); z-index:1000; max-width:300px;}
+.legend {
+  position:absolute; bottom:15px; left:15px; background:white; padding:6px 10px;
+  border-radius:4px; font-size:12px; line-height:1.2;
+  box-shadow:0 0 4px rgba(0,0,0,0.3); z-index:1000;
+  max-width:350px; min-width:120px;
+}
 .legend-title {font-weight:bold; margin-bottom:4px;}
-.legend-item {display:flex; align-items:center; gap:4px; margin-bottom:2px;}
+.legend-item {display:flex; align-items:center; gap:6px; margin-bottom:2px;}
 .legend-color {width:15px; height:15px; display:inline-block;}
-.north-arrow {position:absolute; top:10px; left:10px; width:40px; height:40px; background:url('https://upload.wikimedia.org/wikipedia/commons/e/e0/North_arrow.svg') no-repeat center center; background-size:contain; z-index:1000;}
+.north-arrow {
+  position:absolute; top:10px; left:10px; width:40px; height:40px;
+  background:url('https://upload.wikimedia.org/wikipedia/commons/e/e0/North_arrow.svg') no-repeat center center;
+  background-size:contain; z-index:1000;
+}
 </style>
 </head>
 <body>
@@ -77,12 +86,12 @@ const metrics=[
 ];
 metrics.forEach(m=>metricSelect.innerHTML += `<option value="${m}">${m}</option>`);
 
-// Helper: compute color
-function getColorScale(value, ranges){
-  if(value <= ranges[0]) return '#FF0000';
-  else if(value <= ranges[1]) return '#FF4500';
-  else if(value <= ranges[2]) return '#FFA500';
-  else if(value <= ranges[3]) return '#FFFF00';
+// Color scale helper
+function getColorScale(value, breaks){
+  if(value <= breaks[0]) return '#FF0000';
+  else if(value <= breaks[1]) return '#FF4500';
+  else if(value <= breaks[2]) return '#FFA500';
+  else if(value <= breaks[3]) return '#FFFF00';
   else return '#32CD32';
 }
 
@@ -111,15 +120,15 @@ function loadGeoJSON(){
   });
 }
 
-// Style function with dynamic range
+// Style polygons
 function styleDistrict(feature){
   var crop = cropSelect.value;
   var metric = metricSelect.value;
   var district = feature.properties.adm2_name?.trim().toLowerCase();
   var row = dataIndex[district]?.[crop];
   var value = row ? parseFloat(row[metric])||0 : 0;
-  let ranges = computeRanges(metric);
-  return {fillColor:getColorScale(value, ranges), weight:1, color:'white', fillOpacity:0.7};
+  let breaks = computeBreaks(metric);
+  return {fillColor:getColorScale(value, breaks), weight:1, color:'white', fillOpacity:0.7};
 }
 
 // Tooltip & click
@@ -146,25 +155,25 @@ function onEachFeature(feature, layer){
 
   layer.on('click', function(){
     if(selectedLayer) geoLayer.resetStyle(selectedLayer);
-    layer.setStyle({color:'blue', weight:3, fillOpacity:0.8});
+    layer.setStyle({color:'red', weight:3, fillOpacity:0.8});
     layer.bringToFront();
     selectedLayer = layer;
   });
 }
 
-// Dropdown change updates
+// Dropdown change
 cropSelect.addEventListener('change',()=>{geoLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature))); updateLegend();});
 metricSelect.addEventListener('change',()=>{geoLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature))); updateLegend();});
 
-// Compute 5 ranges
-function computeRanges(metric){
-  let values=[];
-  for(let district in dataIndex){
-    let row = dataIndex[district][cropSelect.value];
-    if(row && row[metric]) values.push(parseFloat(row[metric]));
+// Compute breaks dynamically
+function computeBreaks(metric){
+  let vals=[];
+  for(let d in dataIndex){
+    let row = dataIndex[d][cropSelect.value];
+    if(row && row[metric]) vals.push(parseFloat(row[metric]));
   }
-  if(values.length===0) return [0,0,0,0,0];
-  let min=Math.min(...values), max=Math.max(...values);
+  if(vals.length===0) return [0,0,0,0];
+  let min=Math.min(...vals), max=Math.max(...vals);
   let step=(max-min)/5;
   return [min+step, min+2*step, min+3*step, min+4*step];
 }
@@ -172,17 +181,17 @@ function computeRanges(metric){
 // Update legend
 function updateLegend(){
   let metric = metricSelect.value;
-  let ranges = computeRanges(metric);
+  let breaks = computeBreaks(metric);
   let colors = ['#FF0000','#FF4500','#FFA500','#FFFF00','#32CD32'];
   let labels = ['Very Low','Low','Moderate','High','Very High'];
-  let legendHtml = `<div class="legend-title">Legend ${metric}</div>`;
+  let html = `<div class="legend-title">Legend + ${metric}</div>`;
   for(let i=0;i<5;i++){
-    let rangeText = i===0?`${ranges[i].toFixed(0)}`:
-                    i===4?`${ranges[i-1].toFixed(0)}-${ranges[i].toFixed(0)}`:
-                    `${i===1?ranges[i-1].toFixed(0):ranges[i-1].toFixed(0)}-${ranges[i].toFixed(0)}`;
-    legendHtml += `<div class="legend-item"><span class="legend-color" style="background:${colors[i]}"></span>${labels[i]} (${rangeText})</div>`;
+    let rangeText = i===0?`0-${breaks[0].toFixed(0)}`:
+                    i===4?`${breaks[3].toFixed(0)}-${breaks[3]+(breaks[3]-breaks[2]).toFixed(0)}`:
+                    `${breaks[i-1].toFixed(0)}-${breaks[i].toFixed(0)}`;
+    html += `<div class="legend-item"><span class="legend-color" style="background:${colors[i]}"></span>${labels[i]} (${rangeText})</div>`;
   }
-  document.getElementById('legend').innerHTML = legendHtml;
+  document.getElementById('legend').innerHTML = html;
 }
 </script>
 </body>
