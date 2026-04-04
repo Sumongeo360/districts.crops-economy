@@ -3,56 +3,55 @@
 <head>
 <meta charset="UTF-8">
 <title>Seasonal Crops Production Expenditure and Profit in Bangladesh</title>
-
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet-providers/leaflet-providers.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-
 <style>
 html, body { margin:0; padding:0; height:100%; font-family:'Times New Roman', serif; }
 body { display:flex; flex-direction:column; height:100vh; }
 
 #topbar {
-  max-height:15%; min-height:60px;
-  display:flex; flex-direction:column; justify-content:center; align-items:center;
-  text-align:center; padding:5px 1vw;
+  flex:0 0 auto; display:flex; flex-direction:column; justify-content:center; align-items:center;
+  background:rgba(255,255,255,0.95); padding:5px; text-align:center;
 }
-#topbar h2 { margin:0; font-size:1.8rem; color:red; text-align:center; }
-#dropdowns { margin-top:3px; display:flex; justify-content:center; gap:6px; flex-wrap:wrap; }
-#dropdowns select { font-family:'Times New Roman'; font-size:1rem; color:blue; padding:3px 6px; }
+#topbar h2 { margin:0; font-size:1.5rem; color:red; }
+#dropdowns { margin-top:5px; display:flex; justify-content:center; gap:6px; flex-wrap:wrap; }
+#dropdowns select { font-size:1rem; color:blue; padding:3px 6px; }
 
-#mapContainer { flex:1; position:relative; width:100%; min-height:300px; }
+#mapContainer { flex:1 0 auto; position:relative; width:100%; }
 #map { width:100%; height:100%; }
 
-#sourceCredit { flex:0 0 2%; font-size:0.8rem; text-align:center; }
+#sourceCredit { flex:0 0 auto; font-size:0.8rem; text-align:center; padding:2px; }
 
 .district-label { font-family:'Times New Roman'; font-size:0.8rem; text-align:center; pointer-events:none; }
 
 #legend {
-  position:absolute; bottom:5px; left:5px; z-index:1000;
-  background: rgba(255,255,255,0.95); padding:5px; border-radius:5px;
-  font-size:0.8rem; max-width:80vw; overflow:auto;
+  position:absolute; bottom:10px; left:10px; z-index:1000;
+  background:rgba(255,255,255,0.9); padding:6px 10px; border-radius:5px;
+  font-size:0.8rem; max-width:45vw; min-width:120px; line-height:1.2;
+  box-shadow:0 0 4px rgba(0,0,0,0.3);
 }
-.legend-item { display:flex; align-items:center; margin-bottom:2px; }
-.legend-color { width:15px; height:15px; margin-right:5px; border:1px solid #333; }
+.legend-title { font-weight:bold; margin-bottom:4px; }
+.legend-item { display:flex; align-items:center; gap:6px; margin-bottom:2px; }
+.legend-color { width:15px; height:15px; display:inline-block; border:1px solid #333; }
 
 #northArrow {
-  position:absolute; top:5px; left:5px; z-index:1000;
-  width:40px; height:40px;
-  background:url('https://upload.wikimedia.org/wikipedia/commons/3/36/North_arrow_04.svg') no-repeat center;
-  background-size:contain;
+  position:absolute; top:10px; left:10px; width:40px; height:40px;
+  background:url('https://upload.wikimedia.org/wikipedia/commons/e/e0/North_arrow.svg') no-repeat center center;
+  background-size:contain; z-index:1000;
 }
 
 @media (max-width:600px){
   #topbar h2 { font-size:4vw; }
   #dropdowns select { font-size:3.5vw; }
-  #legend { font-size:3vw; max-width:90vw; }
+  #legend { font-size:3vw; max-width:70vw; }
+  .district-label { font-size:2.5vw; }
 }
 </style>
 </head>
-
 <body>
+
 <div id="topbar">
   <h2>Seasonal Crops Production Expenditure and Profit in Bangladesh</h2>
   <div id="dropdowns">
@@ -74,6 +73,7 @@ body { display:flex; flex-direction:column; height:100vh; }
 
 <script>
 var map = L.map('map',{zoomControl:true}).setView([23.7,90.4],6);
+
 var baseLayer = L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {subdomains:['mt0','mt1','mt2','mt3']}).addTo(map);
 var satelliteLayer = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {subdomains:['mt0','mt1','mt2','mt3']});
 L.control.layers({"Base Map":baseLayer,"Satellite":satelliteLayer},{},{position:'topright'}).addTo(map);
@@ -93,24 +93,78 @@ const metrics=[
   "Total production (m. ton)",
   "Crop share (m. ton/acre)"
 ];
-metrics.forEach(m=>{ metricSelect.innerHTML += `<option value="${m}">${m}</option>`; });
+metrics.forEach(m=>metricSelect.innerHTML += `<option value="${m}">${m}</option>`);
 
 const CSV_URL="https://docs.google.com/spreadsheets/d/1lnnKF_oigj3TQl_N9BfIJJwviHktt3LzyW4UDMjHvxQ/gviz/tq?tqx=out:csv&gid=822582774";
 
-Papa.parse(CSV_URL,{
-  download:true, header:true, skipEmptyLines:true,
-  complete:function(results){
-    results.data.forEach(d=>{
-      let district=d.District?.trim().toLowerCase();
-      let crop=d['Crops Name'];
-      if(!dataIndex[district]) dataIndex[district]={};
-      dataIndex[district][crop]=d;
-    });
-    let crops=[...new Set(results.data.map(d=>d['Crops Name']).filter(Boolean))].sort();
-    cropSelect.innerHTML=crops.map(c=>`<option>${c}</option>`).join('');
-    loadGeoJSON();
+Papa.parse(CSV_URL,{download:true,header:true,skipEmptyLines:true,complete:function(results){
+  results.data.forEach(d=>{
+    let district=d.District?.trim().toLowerCase();
+    let crop=d['Crops Name'];
+    if(!dataIndex[district]) dataIndex[district]={};
+    dataIndex[district][crop]=d;
+  });
+  let crops=[...new Set(results.data.map(d=>d['Crops Name']).filter(Boolean))].sort();
+  cropSelect.innerHTML=crops.map(c=>`<option>${c}</option>`).join('');
+  loadGeoJSON();
+}});
+
+function computeBreaks(metric){
+  let vals=[];
+  for(let d in dataIndex){
+    let row=dataIndex[d][cropSelect.value];
+    if(row && row[metric]) vals.push(parseFloat(row[metric]));
   }
-});
+  if(vals.length===0) return [0,0,0,0,0];
+  let min=Math.min(...vals), max=Math.max(...vals);
+  let step=(max-min)/5;
+  return [min, min+step, min+2*step, min+3*step, min+4*step, max];
+}
+
+function getColor(value, breaks){
+  if(value <= breaks[1]) return '#006400'; // Very Low - dark green
+  else if(value <= breaks[2]) return '#32CD32'; // Low
+  else if(value <= breaks[3]) return '#ADFF2F'; // Moderate
+  else if(value <= breaks[4]) return '#FFFF00'; // High
+  else return '#FF0000'; // Very High
+}
+
+function styleDistrict(feature){
+  let crop=cropSelect.value;
+  let metric=metricSelect.value;
+  let district=feature.properties.adm2_name?.trim().toLowerCase();
+  let row=dataIndex[district]?.[crop];
+  let value=row?parseFloat(row[metric])||0:0;
+  let breaks=computeBreaks(metric);
+  return { fillColor:getColor(value, breaks), weight:1, color:'white', fillOpacity:0.7 };
+}
+
+function onEachFeature(feature, layer){
+  layer.on('mouseover', function(){
+    let crop=cropSelect.value;
+    let district=feature.properties.adm2_name?.trim().toLowerCase();
+    let row=dataIndex[district]?.[crop];
+    let html=row? `<div style="font-size:0.8rem; line-height:1.3; background:#ffdee1; padding:2px; border-radius:4px;">
+      <strong>${row.District}</strong><br>
+      Area: ${row['Cultivated area (Acres)']} Acre<br>
+      Yield: ${row['Yield rate (m. ton) per acre']} ton/acre<br>
+      Expenditure: ${row['Expenditure per acre in Tk.']} Tk<br>
+      Price Produced: ${row['Price of produced crops per acre (Tk.)']} Tk<br>
+      Price By-products: ${row['Price of by- products per acre (Tk.)']} Tk<br>
+      Profit: ${row['Profit per acre (Tk./acre)']} Tk<br>
+      Total Production: ${row['Total production (m. ton)']} ton<br>
+      Crop Share: ${row['Crop share (m. ton/acre)']} ton/acre
+    </div>`:feature.properties.adm2_name;
+    layer.bindTooltip(html,{sticky:true,direction:'auto',opacity:1}).openTooltip();
+  });
+  layer.on('mouseout',()=>layer.closeTooltip());
+  layer.on('click', function(){
+    if(selectedLayer) geoLayer.resetStyle(selectedLayer);
+    layer.setStyle({color:'blue',weight:3,fillOpacity:0.8});
+    layer.bringToFront();
+    selectedLayer=layer;
+  });
+}
 
 function loadGeoJSON(){
   fetch('districts.geojson').then(r=>r.json()).then(geojson=>{
@@ -119,54 +173,8 @@ function loadGeoJSON(){
       let center=layer.getBounds().getCenter();
       L.marker(center,{icon:L.divIcon({className:'district-label',html:layer.feature.properties.adm2_name,iconAnchor:[0,0]})}).addTo(map);
     });
-    map.fitBounds(geoLayer.getBounds());
+    setTimeout(()=>{ map.fitBounds(geoLayer.getBounds()); },50);
     updateLegend();
-  });
-}
-
-function styleDistrict(feature){
-  let crop=cropSelect.value, metric=metricSelect.value;
-  let district=feature.properties.adm2_name?.trim().toLowerCase();
-  let row=dataIndex[district]?.[crop];
-  let value=row? parseFloat(row[metric])||0 : 0;
-  return { fillColor:getColor(value), weight:1, color:'white', fillOpacity:0.7 };
-}
-
-function getColor(v){
-  if(v>1000) return '#006400';
-  else if(v>500) return '#32CD32';
-  else if(v>200) return '#ADFF2F';
-  else if(v>100) return '#FFFF00';
-  else if(v>50) return '#FFA500';
-  else if(v>20) return '#FF4500';
-  else return '#FF0000';
-}
-
-function onEachFeature(feature,layer){
-  layer.on('mouseover',function(){
-    let crop=cropSelect.value;
-    let district=feature.properties.adm2_name?.trim().toLowerCase();
-    let row=dataIndex[district]?.[crop];
-    let html=row? `
-      <div style="font-size:0.8rem; line-height:1.3; background-color:#ffdee1; padding:2px; border-radius:4px;">
-        <strong>${row.District}</strong><br>
-        Area: ${row['Cultivated area (Acres)']} Acre<br>
-        Yield: ${row['Yield rate (m. ton) per acre']} ton/acre<br>
-        Expenditure: ${row['Expenditure per acre in Tk.']} Tk<br>
-        Price Produced: ${row['Price of produced crops per acre (Tk.)']} Tk<br>
-        Price By-products: ${row['Price of by- products per acre (Tk.)']} Tk<br>
-        Profit: ${row['Profit per acre (Tk./acre)']} Tk<br>
-        Total Production: ${row['Total production (m. ton)']} ton<br>
-        Crop Share: ${row['Crop share (m. ton/acre)']} ton/acre
-      </div>` : feature.properties.adm2_name;
-
-    layer.bindTooltip(html,{sticky:true,direction:'auto',opacity:1});
-  });
-  layer.on('click',function(){
-    if(selectedLayer) geoLayer.resetStyle(selectedLayer);
-    layer.setStyle({color:'blue', weight:3, fillOpacity:0.8});
-    layer.bringToFront();
-    selectedLayer=layer;
   });
 }
 
@@ -174,25 +182,16 @@ cropSelect.addEventListener('change',()=>{ geoLayer.eachLayer(l=>l.setStyle(styl
 metricSelect.addEventListener('change',()=>{ geoLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature))); updateLegend(); });
 
 function updateLegend(){
-  let crop=cropSelect.value, metric=metricSelect.value;
-  let values=[];
-  geoLayer.eachLayer(l=>{
-    let district=l.feature.properties.adm2_name?.trim().toLowerCase();
-    let row=dataIndex[district]?.[crop];
-    if(row) values.push(parseFloat(row[metric])||0);
-  });
-  if(values.length===0) return;
-
-  let min=Math.min(...values), max=Math.max(...values);
-  let step=(max-min)/5;
-  let breaks=[min, min+step, min+2*step, min+3*step, min+4*step, max];
+  let metric=metricSelect.value;
+  let breaks=computeBreaks(metric);
+  let colors=['#006400','#32CD32','#ADFF2F','#FFFF00','#FF0000'];
   let labels=['Very Low','Low','Moderate','High','Very High'];
-  let html='<strong>' + metric + '</strong><br>';
+  let html=`<div class="legend-title">${metric}</div>`;
   for(let i=0;i<5;i++){
-    html+=`<div class="legend-item">
-      <div class="legend-color" style="background-color:${getColor((breaks[i]+breaks[i+1])/2)}"></div>
-      ${labels[i]} (${breaks[i].toFixed(1)} - ${breaks[i+1].toFixed(1)})
-    </div>`;
+    let rangeText=i===0?`0-${breaks[1].toFixed(0)}`:
+                  i===4?`${breaks[4].toFixed(0)}-${breaks[5].toFixed(0)}`:
+                  `${breaks[i].toFixed(0)}-${breaks[i+1].toFixed(0)}`;
+    html+=`<div class="legend-item"><span class="legend-color" style="background:${colors[i]}"></span>${labels[i]} (${rangeText})</div>`;
   }
   legendDiv.innerHTML=html;
 }
