@@ -6,65 +6,39 @@
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/leaflet-providers/leaflet-providers.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chroma-js@2.4.2/chroma.min.js"></script>
 
 <style>
-html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif;}
+html,body{margin:0;height:100%;font-family:Arial;}
 
 #topbar{
-  position:absolute;top:0;left:0;width:100%;z-index:1000;
+  position:absolute;top:0;width:100%;z-index:1000;
   background:#fff;padding:10px;text-align:center;
-  box-shadow:0 2px 6px rgba(0,0,0,0.2);
 }
 
-#topbar h2{
-  margin:0;
-  font-size:20px;
-}
+#dropdowns{margin-top:5px;display:flex;gap:8px;justify-content:center;}
+#map{height:100%;width:100%;}
 
-#dropdowns{
-  margin-top:5px;
-  display:flex;
-  gap:8px;
-  justify-content:center;
-}
-
-#dropdowns select{padding:5px;}
-
-#map{
-  width:100%;
-  height:100%;
-}
-
-/* Labels */
+/* LABEL STYLE */
 .label{
-  font-family:"Times New Roman", serif;
+  font-family:"Times New Roman";
   font-size:12.5px;
   color:#000;
   text-shadow:1px 1px 2px #fff;
-  pointer-events:none;
+  white-space:nowrap;
 }
 
-/* Pink popup */
-.leaflet-popup-content-wrapper{
-  background:#ffe6ea;
-  border-radius:8px;
-}
-.leaflet-popup-tip{
-  background:#ffe6ea;
-}
+/* POPUP */
+.leaflet-popup-content-wrapper{background:#ffe6ea;}
+.leaflet-popup-tip{background:#ffe6ea;}
 
-/* Footer */
+/* FOOTER */
 #footer{
-  position:absolute;
-  bottom:5px;
-  width:100%;
-  text-align:center;
-  font-size:13px;
-  background:rgba(255,255,255,0.8);
-  padding:4px;
+  position:absolute;bottom:5px;width:100%;
+  text-align:center;font-size:13px;
+  background:rgba(255,255,255,0.85);
+  z-index:1000;
 }
 </style>
 </head>
@@ -84,11 +58,8 @@ html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif;}
       <option value="Cultivated area (Acres)">Cultivated Area</option>
       <option value="Yield rate (m. ton) per acre">Yield</option>
       <option value="Expenditure per acre in Tk.">Expenditure</option>
-      <option value="Price of produced crops per acre (Tk.)">Crop Price</option>
-      <option value="Price of by- products per acre (Tk.)">By-product</option>
       <option value="Profit per acre (Tk./acre)">Profit</option>
       <option value="Total production (m. ton)">Production</option>
-      <option value="Crop share (m. ton/acre)">Share</option>
     </select>
   </div>
 </div>
@@ -96,137 +67,127 @@ html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif;}
 <div id="map"></div>
 
 <div id="footer">
-  Data Source: 
+  Data Source:
   <a href="https://objectstorage.ap-dcc-gazipur-1.oraclecloud15.com/n/axvjbnqprylg/b/V2Ministry/o/office-bbs/2024/12/c303b53b29864763ae8cf174fdb57a44.pdf" target="_blank">
-    Agriculture Sample Census-2020
-  </a> |
-  © <a href="https://www.linkedin.com/in/md-sumon-ali-992b91214/" target="_blank">
-    Sumon
+    Agriculture Sample Census 2020
   </a>
+  |
+  © <a href="https://www.linkedin.com/in/md-sumon-ali-992b91214/" target="_blank">Sumon</a>
 </div>
 
 <script>
-// -------------------------
+// ---------------- MAP
 var map = L.map('map',{zoomControl:false}).setView([23.7,90.4],6);
 L.control.zoom({position:'bottomleft'}).addTo(map);
 
-// Light basemap (clear)
-var baseMap = L.tileLayer.provider('CartoDB.Positron').addTo(map);
+// Google map
+var base = L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}',{
+  subdomains:['mt0','mt1','mt2','mt3']
+}).addTo(map);
 
-// Satellite
-var satelliteMap = L.tileLayer.provider('Esri.WorldImagery');
+var sat = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{
+  subdomains:['mt0','mt1','mt2','mt3']
+});
 
-// Layer control (INSIDE MAP)
-L.control.layers(
-  {"Light Map": baseMap, "Satellite": satelliteMap},
-  null,
-  {position:'topright'}
-).addTo(map);
+L.control.layers({"Map":base,"Satellite":sat},null,{position:'topright'}).addTo(map);
 
-// -------------------------
-var geojsonLayer,dataIndex={},labelLayer=L.layerGroup().addTo(map);
+// ---------------- DATA
+var geoLayer, labels=L.layerGroup().addTo(map), dataIndex={};
 
-var CSV_URL="https://docs.google.com/spreadsheets/d/1lnnKF_oigj3TQl_N9BfIJJwviHktt3LzyW4UDMjHvxQ/gviz/tq?tqx=out:csv&gid=822582774";
-
-// -------------------------
-Papa.parse(CSV_URL,{
-  download:true,header:true,skipEmptyLines:true,
-  complete:function(res){
-    res.data.forEach(d=>{
-      let dist=d.District?.trim().toLowerCase();
-      let crop=d['Crops Name'];
+Papa.parse("https://docs.google.com/spreadsheets/d/1lnnKF_oigj3TQl_N9BfIJJwviHktt3LzyW4UDMjHvxQ/gviz/tq?tqx=out:csv&gid=822582774",{
+  download:true,header:true,
+  complete:r=>{
+    r.data.forEach(d=>{
+      let dist=d.District?.toLowerCase();
       if(!dataIndex[dist]) dataIndex[dist]={};
-      dataIndex[dist][crop]=d;
+      dataIndex[dist][d['Crops Name']]=d;
     });
     loadGeo();
   }
 });
 
-// -------------------------
+// ---------------- GEO
 function loadGeo(){
   fetch('districts.geojson')
   .then(r=>r.json())
   .then(g=>{
-    geojsonLayer=L.geoJSON(g,{
-      style:styleDistrict,
-      onEachFeature:onEachFeature
+    geoLayer=L.geoJSON(g,{
+      style:styleFn,
+      onEachFeature:onEach
     }).addTo(map);
 
-    addLabels(g);
+    addLabels(geoLayer);
   });
 }
 
-// -------------------------
+// ---------------- COLOR
 function getColor(v,arr){
   if(!arr.length) return '#ccc';
-  let min=Math.min(...arr),max=Math.max(...arr);
-  return chroma.scale(['red','yellow','green']).domain([min,max])(v).hex();
+  return chroma.scale(['red','yellow','green'])
+    .domain([Math.min(...arr),Math.max(...arr)])(v).hex();
 }
 
-// -------------------------
-function styleDistrict(f){
+function styleFn(f){
   let crop=cropSelect.value;
   let metric=metricSelect.value;
-  let dist=f.properties.adm2_name?.trim().toLowerCase();
+  let dist=f.properties.adm2_name.toLowerCase();
 
   let row=dataIndex[dist]?.[crop];
-  let vals=Object.values(dataIndex).map(d=>d[crop]?.[metric]).filter(v=>v).map(Number);
+  let vals=Object.values(dataIndex)
+    .map(d=>d[crop]?.[metric])
+    .filter(v=>v).map(Number);
 
-  let v=row?Number(row[metric])||0:0;
+  let v=row?Number(row[metric]):0;
 
-  return {fillColor:getColor(v,vals),weight:1,color:'#fff',fillOpacity:0.7};
+  return {fillColor:getColor(v,vals),color:'#fff',weight:1,fillOpacity:0.7};
 }
 
-// -------------------------
-function onEachFeature(f,l){
+// ---------------- POPUP
+function onEach(f,l){
   l.on('click',e=>{
     let crop=cropSelect.value;
-    let dist=f.properties.adm2_name?.trim().toLowerCase();
+    let dist=f.properties.adm2_name.toLowerCase();
     let row=dataIndex[dist]?.[crop];
 
     let html=row?`
-      <b>${row.District}</b><br><br>
-      Area: ${row['Cultivated area (Acres)']} Acre<br>
-      Yield: ${row['Yield rate (m. ton) per acre']} ton/acre<br>
-      Expenditure: Tk ${row['Expenditure per acre in Tk.']}<br>
-      Profit: Tk ${row['Profit per acre (Tk./acre)']}<br>
-      Production: ${row['Total production (m. ton)']} ton
-    `:`<b>${f.properties.adm2_name}</b><br>No data`;
+      <div style="font-family:'Times New Roman';font-size:13px;">
+        <b>${row.District}</b><br><br>
+        Area: ${row['Cultivated area (Acres)']} Acre<br>
+        Yield: ${row['Yield rate (m. ton) per acre']} ton/acre<br>
+        Expenditure: ${row['Expenditure per acre in Tk.']} Tk<br>
+        Profit: ${row['Profit per acre (Tk./acre)']} Tk<br>
+        Production: ${row['Total production (m. ton)']} ton
+      </div>
+    `:`No data`;
 
     L.popup().setLatLng(e.latlng).setContent(html).openOn(map);
   });
 }
 
-// -------------------------
-function addLabels(g){
-  labelLayer.clearLayers();
+// ---------------- LABEL FIX (KEY PART)
+function addLabels(layer){
+  labels.clearLayers();
 
-  g.features.forEach(f=>{
-    let center=getCenter(f.geometry.coordinates);
-    let name=f.properties.adm2_name;
+  layer.eachLayer(l=>{
+    let center=l.getBounds().getCenter(); // 🔥 FIXED METHOD
 
-    let icon=L.divIcon({
-      className:'label',
-      html:`${name}`
-    });
+    let name=l.feature.properties.adm2_name;
 
-    L.marker([center[1],center[0]],{icon}).addTo(labelLayer);
+    L.marker(center,{
+      icon:L.divIcon({
+        className:'label',
+        html:name
+      })
+    }).addTo(labels);
   });
 }
 
-// centroid
-function getCenter(c){
-  let x=0,y=0,n=0;
-  c[0].forEach(pt=>{x+=pt[0];y+=pt[1];n++;});
-  return [x/n,y/n];
-}
-
-// -------------------------
+// ---------------- UPDATE
 cropSelect.onchange=update;
 metricSelect.onchange=update;
 
 function update(){
-  geojsonLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature)));
+  geoLayer.eachLayer(l=>l.setStyle(styleFn(l.feature)));
 }
 </script>
 
