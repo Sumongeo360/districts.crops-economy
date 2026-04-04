@@ -4,38 +4,33 @@
 <meta charset="UTF-8">
 <title>Seasonal Crops Production Expenditure and Profit in Bangladesh</title>
 
-<!-- Leaflet CSS & JS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet-providers/leaflet-providers.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
 <style>
-html, body { margin:0; padding:0; height:100%; font-family: 'Times New Roman', serif; }
+html, body { margin:0; padding:0; height:100%; font-family:'Times New Roman', serif; }
 #topbar {
   position:absolute; top:0; left:0; width:100%; z-index:1000;
-  background:rgba(255,255,255,0.95); padding:5px 10px;
-  text-align:center;
+  background:rgba(255,255,255,0.95); padding:5px 10px; text-align:center;
 }
-#topbar h2 {
-  margin:0; font-size:18px; color:red;
-}
-#dropdowns {
-  margin-top:3px; display:flex; justify-content:center; gap:6px;
-}
+#topbar h2 { margin:0; font-size:18px; color:red; }
+#dropdowns { margin-top:3px; display:flex; justify-content:center; gap:6px; }
 #dropdowns select { font-family:'Times New Roman'; font-size:14px; color:blue; padding:3px; }
 #map { width:100%; height:100%; }
 #sourceCredit {
   position:absolute; bottom:5px; left:50%; transform:translateX(-50%);
   font-size:12px; text-align:center; z-index:1000;
 }
+.district-label { font-family:'Times New Roman'; font-size:12.5px; text-align:center; pointer-events:none; }
 </style>
 </head>
 
 <body>
 
 <div id="topbar">
-  <h2>Seasonal Crops Production, Expenditure and Profit in Bangladesh</h2>
+  <h2>Seasonal Crops Production Expenditure and Profit in Bangladesh</h2>
   <div id="dropdowns">
     <select id="cropSelect"></select>
     <select id="metricSelect"></select>
@@ -76,6 +71,11 @@ const metrics=[
 
 metrics.forEach(m=>{ metricSelect.innerHTML += `<option value="${m}">${m}</option>`; });
 
+// Percentile-based green→red gradient
+function getColor(v){
+  return v>1000?'#006400':v>500?'#32CD32':v>200?'#ADFF2F':v>100?'#FFFF00':v>50?'#FFA500':v>20?'#FF4500':'#FF0000';
+}
+
 // Load CSV
 Papa.parse(CSV_URL,{download:true,header:true,skipEmptyLines:true,complete:function(results){
   results.data.forEach(d=>{
@@ -97,11 +97,10 @@ function loadGeoJSON(){
     .then(geojson=>{
       geoLayer = L.geoJSON(geojson,{
         style: styleDistrict,
-        onEachFeature: onEachFeature,
-        pointToLayer: function(f,latlng){ return L.marker(latlng); }
+        onEachFeature: onEachFeature
       }).addTo(map);
 
-      // Labels for all districts
+      // District labels
       geoLayer.eachLayer(function(layer){
         var center = layer.getBounds().getCenter();
         L.marker(center,{icon:L.divIcon({
@@ -113,20 +112,15 @@ function loadGeoJSON(){
     });
 }
 
-// Style based on metric
 function styleDistrict(feature){
   var crop = cropSelect.value;
   var metric = metricSelect.value;
   var district = feature.properties.adm2_name?.trim().toLowerCase();
   var row = dataIndex[district]?.[crop];
   var value = row ? parseFloat(row[metric]) || 0 : 0;
-
-  var color = value>1000?'#084081':value>500?'#0868ac':value>200?'#2b8cbe':value>100?'#4eb3d3':value>50?'#7bccc4':value>20?'#a8ddb5':'#ccebc5';
-
-  return { fillColor: color, weight:1, color:'white', fillOpacity:0.7 };
+  return { fillColor:getColor(value), weight:1, color:'white', fillOpacity:0.7 };
 }
 
-// Tooltip & click selection
 function onEachFeature(feature, layer){
   layer.on('mouseover', function(){
     var crop = cropSelect.value;
@@ -134,8 +128,7 @@ function onEachFeature(feature, layer){
     var row = dataIndex[district]?.[crop];
     var html = row ? `
       <div style="font-size:13px; line-height:1.2; background-color:#ffdee1; padding:3px; border-radius:4px;">
-        ${row.District} 
-        Area: ${row['Cultivated area (Acres)']} Acre
+        ${row.District} Area: ${row['Cultivated area (Acres)']} Acre
         Yield: ${row['Yield rate (m. ton) per acre']} ton/acre
         Expenditure: ${row['Expenditure per acre in Tk.']} Tk
         Profit: ${row['Profit per acre (Tk./acre)']} Tk
@@ -150,6 +143,7 @@ function onEachFeature(feature, layer){
   layer.on('click', function(){
     if(selectedLayer) geoLayer.resetStyle(selectedLayer);
     layer.setStyle({color:'black', weight:3, fillOpacity:0.8});
+    layer.bringToFront();
     selectedLayer = layer;
   });
 }
@@ -157,7 +151,7 @@ function onEachFeature(feature, layer){
 // Update map on dropdown change
 cropSelect.addEventListener('change', ()=>{ geoLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature))); });
 metricSelect.addEventListener('change', ()=>{ geoLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature))); });
-</script>
 
+</script>
 </body>
 </html>
