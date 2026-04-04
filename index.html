@@ -13,36 +13,44 @@
 html, body {
   margin:0; padding:0; height:100%; font-family:'Times New Roman', serif;
 }
-body { display: flex; flex-direction: column; }
+body {
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+}
 
 #topbar {
-  display: flex; flex-direction: column; justify-content:center; align-items:center;
-  height: 10vh; text-align:center; padding:0.5vh 1vw;
+  flex:0 0 10%; 
+  display:flex; flex-direction:column; justify-content:center; align-items:center;
+  text-align:center; padding:0.5vh 1vw;
 }
-#topbar h2 { margin:0; font-size:2.2vh; color:red; }
+#topbar h2 { margin:0; font-size:1.8rem; color:red; }
 #dropdowns { margin-top:3px; display:flex; justify-content:center; gap:6px; flex-wrap:wrap; }
-#dropdowns select { font-family:'Times New Roman'; font-size:1.8vh; color:blue; padding:0.3vh 0.5vw; }
+#dropdowns select { font-family:'Times New Roman'; font-size:1rem; color:blue; padding:3px 6px; }
 
-#mapContainer { position:relative; height:88vh; width:100%; }
+#mapContainer {
+  flex:1 0 auto; 
+  position:relative; width:100%;
+}
 #map { width:100%; height:100%; }
 
 #sourceCredit {
-  height:2vh; font-size:1.2vh; line-height:2vh;
+  flex:0 0 2%; font-size:0.8rem; line-height:2vh;
   text-align:center;
 }
 
-.district-label { font-family:'Times New Roman'; font-size:1.2vh; text-align:center; pointer-events:none; }
+.district-label { font-family:'Times New Roman'; font-size:0.8rem; text-align:center; pointer-events:none; }
 
 #legend {
-  position:absolute; bottom:1vh; left:1vw; z-index:1000;
-  background: rgba(255,255,255,0.9); padding:0.5vh 1vw; border-radius:5px;
-  font-size:1.4vh; max-width:40vw;
+  position:absolute; bottom:5px; left:5px; z-index:1000;
+  background: rgba(255,255,255,0.9); padding:5px; border-radius:5px;
+  font-size:0.8rem; max-width:40vw;
 }
-.legend-item { display:flex; align-items:center; margin-bottom:0.3vh; }
-.legend-color { width:2vh; height:2vh; margin-right:0.5vh; border:1px solid #333; }
+.legend-item { display:flex; align-items:center; margin-bottom:2px; }
+.legend-color { width:15px; height:15px; margin-right:5px; border:1px solid #333; }
 
 #northArrow {
-  position:absolute; top:2vh; left:1vw; z-index:1000;
+  position:absolute; top:5px; left:5px; z-index:1000;
   width:40px; height:40px;
   background:url('https://upload.wikimedia.org/wikipedia/commons/3/36/North_arrow_04.svg') no-repeat center;
   background-size:contain;
@@ -77,8 +85,6 @@ body { display: flex; flex-direction: column; }
 
 <script>
 var map = L.map('map',{zoomControl:true}).setView([23.7,90.4],6);
-
-// Google Base & Satellite layers
 var baseLayer = L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {subdomains:['mt0','mt1','mt2','mt3']}).addTo(map);
 var satelliteLayer = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {subdomains:['mt0','mt1','mt2','mt3']});
 L.control.layers({"Base Map":baseLayer,"Satellite":satelliteLayer},{},{position:'topright'}).addTo(map);
@@ -102,7 +108,6 @@ metrics.forEach(m=>{ metricSelect.innerHTML += `<option value="${m}">${m}</optio
 
 const CSV_URL="https://docs.google.com/spreadsheets/d/1lnnKF_oigj3TQl_N9BfIJJwviHktt3LzyW4UDMjHvxQ/gviz/tq?tqx=out:csv&gid=822582774";
 
-// Load CSV
 Papa.parse(CSV_URL,{download:true,header:true,skipEmptyLines:true,complete:function(results){
   results.data.forEach(d=>{
     let district=d.District?.trim().toLowerCase();
@@ -115,35 +120,28 @@ Papa.parse(CSV_URL,{download:true,header:true,skipEmptyLines:true,complete:funct
   loadGeoJSON();
 }});
 
-// Load GeoJSON
 function loadGeoJSON(){
   fetch('districts.geojson').then(r=>r.json()).then(geojson=>{
     geoLayer=L.geoJSON(geojson,{style:styleDistrict,onEachFeature:onEachFeature}).addTo(map);
 
-    // District labels
     geoLayer.eachLayer(layer=>{
       let center=layer.getBounds().getCenter();
       L.marker(center,{icon:L.divIcon({className:'district-label',html:layer.feature.properties.adm2_name,iconAnchor:[0,0]})}).addTo(map);
     });
 
-    // Auto zoom to Bangladesh
     map.fitBounds(geoLayer.getBounds());
-
     updateLegend();
   });
 }
 
-// Style polygons
 function styleDistrict(feature){
   let crop=cropSelect.value, metric=metricSelect.value;
   let district=feature.properties.adm2_name?.trim().toLowerCase();
   let row=dataIndex[district]?.[crop];
   let value=row? parseFloat(row[metric])||0 : 0;
-  let color=getColor(value);
-  return { fillColor:color, weight:1, color:'white', fillOpacity:0.7 };
+  return { fillColor:getColor(value), weight:1, color:'white', fillOpacity:0.7 };
 }
 
-// Green→Red color scale
 function getColor(v){
   if(v>1000) return '#006400';
   else if(v>500) return '#32CD32';
@@ -154,14 +152,13 @@ function getColor(v){
   else return '#FF0000';
 }
 
-// Tooltip & click select
 function onEachFeature(feature,layer){
   layer.on('mouseover',function(){
     let crop=cropSelect.value;
     let district=feature.properties.adm2_name?.trim().toLowerCase();
     let row=dataIndex[district]?.[crop];
     let html=row? `
-      <div style="font-size:13px; line-height:1.3; background-color:#ffdee1; padding:3px; border-radius:4px;">
+      <div style="font-size:0.8rem; line-height:1.3; background-color:#ffdee1; padding:2px; border-radius:4px;">
         <strong>${row.District}</strong><br>
         Area: ${row['Cultivated area (Acres)']} Acre<br>
         Yield: ${row['Yield rate (m. ton) per acre']} ton/acre<br>
@@ -176,7 +173,7 @@ function onEachFeature(feature,layer){
     layer.bindTooltip(html,{sticky:true,direction:'auto',opacity:1}).openTooltip();
   });
 
-  layer.on('mouseout',function(){ layer.closeTooltip(); });
+  layer.on('mouseout',()=>layer.closeTooltip());
 
   layer.on('click',function(){
     if(selectedLayer) geoLayer.resetStyle(selectedLayer);
@@ -186,16 +183,12 @@ function onEachFeature(feature,layer){
   });
 }
 
-// Update map when dropdown changes
 cropSelect.addEventListener('change',()=>{ geoLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature))); updateLegend(); });
 metricSelect.addEventListener('change',()=>{ geoLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature))); updateLegend(); });
 
-// Legend
 function updateLegend(){
-  let crop=cropSelect.value;
-  let metric=metricSelect.value;
+  let crop=cropSelect.value, metric=metricSelect.value;
   let values=[];
-
   geoLayer.eachLayer(l=>{
     let district=l.feature.properties.adm2_name?.trim().toLowerCase();
     let row=dataIndex[district]?.[crop];
@@ -211,7 +204,7 @@ function updateLegend(){
   for(let i=0;i<5;i++){
     html+=`<div class="legend-item">
       <div class="legend-color" style="background-color:${getColor((breaks[i]+breaks[i+1])/2)}"></div>
-      ${labels[i]} (${breaks[i].toFixed(1)} - ${breaks[i+1].toFixed(1)}) 
+      ${labels[i]} (${breaks[i].toFixed(1)} - ${breaks[i+1].toFixed(1)})
     </div>`;
   }
   legendDiv.innerHTML=html;
