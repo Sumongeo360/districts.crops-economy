@@ -132,7 +132,7 @@ function onEachFeature(feature, layer){
 
   layer.on('click', function(){
     if(selectedLayer) geoLayer.resetStyle(selectedLayer);
-    layer.setStyle({color:'red', weight:3, fillOpacity:0.8});
+    layer.setStyle({color:'blue', weight:3, fillOpacity:0.8});
     layer.bringToFront();
     selectedLayer = layer;
   });
