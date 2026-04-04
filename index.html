@@ -12,15 +12,20 @@
 
 <style>
 html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif;}
-#map{width:100%;height:100%;}
-#topbar{
-  position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:1000;
-  background:rgba(255,255,255,0.95);padding:10px 15px;border-radius:8px;
-  display:flex;flex-direction:column;align-items:center;box-shadow:0 2px 6px rgba(0,0,0,0.3);
+#topContainer{
+  width:100%;position:absolute;top:0;left:0;z-index:1000;
+  display:flex;flex-direction:column;align-items:center;
+  background:rgba(255,255,255,0.95);box-shadow:0 2px 6px rgba(0,0,0,0.3);
 }
-#topbar h2{margin:0 0 5px 0;font-size:18px;color:#d32f2f;}
-#dropdowns{display:flex;gap:8px;}
-#dropdowns select{padding:5px;font-size:14px;}
+#titleRow{
+  width:100%;text-align:center;padding:10px 0;background:#d32f2f;color:#fff;font-size:20px;font-weight:bold;
+}
+#filterRow{
+  display:flex;gap:8px;padding:6px 10px 10px 10px;
+  flex-wrap:wrap;justify-content:center;
+}
+#filterRow select{padding:5px;font-size:14px;}
+#map{position:absolute;top:90px;bottom:0;left:0;right:0;}
 .leaflet-label{
   font-weight:bold;color:#000;background:none;border:none;text-shadow:1px 1px 2px #fff;font-size:12px;
 }
@@ -29,9 +34,9 @@ html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif;}
 
 <body>
 
-<div id="topbar">
-  <h2>Crops Dashboard</h2>
-  <div id="dropdowns">
+<div id="topContainer">
+  <div id="titleRow">Crops Dashboard</div>
+  <div id="filterRow">
     <select id="cropSelect">
       <option>Local Boro</option>
       <option>Local Bona Aus</option>
@@ -48,9 +53,8 @@ html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif;}
 <div id="map"></div>
 
 <script>
-// Map init
-var map = L.map('map', { zoomControl: true }).setView([23.7,90.4], 6);
-L.control.zoom({ position:'bottomleft' }).addTo(map);
+// Initialize map
+var map = L.map('map', { zoomControl: true }).setView([23.7, 90.4], 6);
 
 // Base layers
 var satelliteMap = L.tileLayer.provider('Esri.WorldImagery').addTo(map);
@@ -82,8 +86,7 @@ function loadGeoJSON(){
     .then(geojson => {
       geojsonLayer = L.geoJSON(geojson, {
         style: styleDistrict,
-        onEachFeature: onEachFeature,
-        pointToLayer: function(f,latlng){ return L.marker(latlng); }
+        onEachFeature: onEachFeature
       }).addTo(map);
 
       // Add labels
@@ -115,7 +118,6 @@ function styleDistrict(feature){
   const row = dataIndex[district]?.[crop];
   let value = row ? parseFloat(row[metric])||0 : 0;
 
-  // Compute percentile color
   const allValues = Object.values(dataIndex).map(d=>d[crop]?parseFloat(d[crop][metric]||0):0);
   const fillColor = getPercentileColor(value, allValues);
 
@@ -140,11 +142,12 @@ function onEachFeature(feature, layer){
   });
 }
 
-// Update map on dropdown change
+// Update map when dropdown changes
 document.getElementById('cropSelect').addEventListener('change', updateMap);
 document.getElementById('metricSelect').addEventListener('change', updateMap);
 
 function updateMap(){
+  if(!geojsonLayer) return;
   geojsonLayer.eachLayer(layer=>layer.setStyle(styleDistrict(layer.feature)));
 }
 </script>
