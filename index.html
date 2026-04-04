@@ -184,7 +184,7 @@ function updateLegend(){
   let breaks = computeBreaks(metric);
   let colors = ['#FF0000','#FF4500','#FFA500','#FFFF00','#32CD32'];
   let labels = ['Very Low','Low','Moderate','High','Very High'];
-  let html = `<div class="legend-title">Legend + ${metric}</div>`;
+  let html = `<div class="legend-title">${metric}</div>`;
   for(let i=0;i<5;i++){
     let rangeText = i===0?`0-${breaks[0].toFixed(0)}`:
                     i===4?`${breaks[3].toFixed(0)}-${breaks[3]+(breaks[3]-breaks[2]).toFixed(0)}`:
