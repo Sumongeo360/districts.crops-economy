@@ -2,166 +2,125 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Crops Dashboard</title>
-
-<!-- Leaflet -->
+<title>Crop Dashboard - Bangladesh Districts</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/leaflet-providers/leaflet-providers.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-
+<script src="https://cdn.jsdelivr.net/npm/chroma-js@2.4.2/chroma.min.js"></script>
 <style>
-html,body{margin:0;padding:0;height:100%;font-family:Arial,sans-serif;}
-#topContainer{
-  width:100%;position:absolute;top:0;left:0;z-index:1000;
-  display:flex;flex-direction:column;align-items:center;
-  background:rgba(255,255,255,0.95);box-shadow:0 2px 6px rgba(0,0,0,0.3);
-}
-#titleRow{
-  width:100%;text-align:center;padding:10px 0;background:#d32f2f;color:#fff;font-size:20px;font-weight:bold;
-}
-#filterRow{
-  display:flex;gap:8px;padding:6px 10px 10px 10px;
-  flex-wrap:wrap;justify-content:center;
-}
-#filterRow select{padding:5px;font-size:14px;}
-#map{position:absolute;top:90px;bottom:0;left:0;right:0;}
-.leaflet-label{
-  font-weight:bold;color:#000;background:none;border:none;text-shadow:1px 1px 2px #fff;font-size:12px;
-}
+  html, body {margin:0; padding:0; height:100%; font-family:"Times New Roman", serif;}
+  #map {height: calc(100% - 100px); width: 100%;}
+  #header {display:flex; flex-direction:column; align-items:center; padding:4px; background:#fff;}
+  #title {font-size:20px; font-weight:bold; margin:2px;}
+  #controls {display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin:4px;}
+  select {font-size:14px; padding:2px 4px;}
+  .leaflet-tooltip.my-tooltip {background:rgba(255,255,255,0.9); color:#000; font-size:12px; border-radius:4px; padding:2px 4px;}
 </style>
 </head>
-
 <body>
 
-<div id="topContainer">
-  <div id="titleRow">Crops Dashboard</div>
-  <div id="filterRow">
-    <select id="cropSelect"><option>Loading crops...</option></select>
-    <select id="metricSelect"><option>Loading metrics...</option></select>
+<div id="header">
+  <div id="title">Bangladesh District Crop Dashboard</div>
+  <div id="controls">
+    <select id="metricSelect">
+      <option value="Cultivated_area">Cultivated area (Acres)</option>
+      <option value="Yield_rate">Yield rate (m. ton per acre)</option>
+      <option value="Expenditure">Expenditure per acre (Tk.)</option>
+      <option value="Price_crop">Price of produced crops per acre (Tk.)</option>
+      <option value="Price_byproduct">Price of by-products per acre (Tk.)</option>
+      <option value="Profit">Profit per acre (Tk./acre)</option>
+      <option value="Total_production">Total production (m. ton)</option>
+      <option value="Crop_share">Crop share (m. ton/acre)</option>
+    </select>
   </div>
 </div>
 
 <div id="map"></div>
 
 <script>
-// Initialize map
-var map = L.map('map', { zoomControl: true }).setView([23.7, 90.4], 6);
-
-// Base layers
-var satelliteMap = L.tileLayer.provider('Esri.WorldImagery').addTo(map);
-var baseMap = L.tileLayer.provider('OpenStreetMap.Mapnik');
-L.control.layers({ "Satellite": satelliteMap, "Base": baseMap }, null, { position:'topright' }).addTo(map);
-
-// Globals
-var geojsonLayer, dataIndex = {};
-const CSV_URL = "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/gviz/tq?tqx=out:csv&gid=0"; // Replace with your Sheet ID and gid
-const cropSelect = document.getElementById('cropSelect');
-const metricSelect = document.getElementById('metricSelect');
-
-// Load CSV
-Papa.parse(CSV_URL,{
-  download:true, header:true, skipEmptyLines:true,
-  complete:function(results){
-    const headers = results.meta.fields;
-
-    // Populate metric dropdown dynamically
-    metricSelect.innerHTML = '';
-    headers.filter(h => h !== 'Crops Name' && h !== 'District').forEach(h=>{
-      const opt = document.createElement('option');
-      opt.value = h; opt.textContent = h;
-      metricSelect.appendChild(opt);
-    });
-
-    // Populate crop dropdown dynamically
-    const cropSet = new Set(results.data.map(d=>d['Crops Name']).filter(Boolean));
-    cropSelect.innerHTML='';
-    cropSet.forEach(c=>{
-      const opt = document.createElement('option');
-      opt.value=c; opt.textContent=c;
-      cropSelect.appendChild(opt);
-    });
-
-    results.data.forEach(d => {
-      const district = d.District?.trim().toLowerCase();
-      const crop = d['Crops Name'];
-      if(!dataIndex[district]) dataIndex[district]={};
-      dataIndex[district][crop] = d;
-    });
-
-    loadGeoJSON();
-  }
+// -----------------------------
+// Initialize Leaflet map
+// -----------------------------
+const map = L.map('map', {
+  center: [23.685, 90.3563], // Bangladesh center
+  zoom: 7
 });
 
-// Load GeoJSON
-function loadGeoJSON(){
-  fetch('districts.geojson') // replace with your geojson path
-    .then(r => r.json())
-    .then(geojson => {
-      geojsonLayer = L.geoJSON(geojson, {
-        style: styleDistrict,
-        onEachFeature: onEachFeature
-      }).addTo(map);
+// Base layers
+const satellite = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+  maxZoom: 20,
+  subdomains:['mt0','mt1','mt2','mt3'],
+  attribution: 'Google Satellite'
+}).addTo(map);
 
-      // Add district labels
-      geojsonLayer.eachLayer(layer=>{
-        const center = layer.getBounds().getCenter();
-        L.marker(center,{icon:L.divIcon({
-          className:'leaflet-label',
-          html: layer.feature.properties.adm2_name
-        })}).addTo(map);
-      });
+const streets = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: 'OpenStreetMap'
+});
+
+// Layer control
+L.control.layers({Satellite: satellite, Streets: streets}).addTo(map);
+
+// -----------------------------
+// Load GeoJSON (replace with your districts file)
+// -----------------------------
+fetch('./data/districts.geojson')
+.then(res => res.json())
+.then(geojson => {
+  
+  // Example crop data (replace with your full dataset)
+  const cropData = {
+    "Dhaka": {Cultivated_area: 12000, Yield_rate: 2.5, Expenditure: 15000, Price_crop: 25000, Price_byproduct: 2000, Profit: 12000, Total_production: 30000, Crop_share: 2.5},
+    "Chittagong": {Cultivated_area: 10000, Yield_rate: 2.2, Expenditure: 14000, Price_crop: 22000, Price_byproduct: 1800, Profit: 10000, Total_production: 22000, Crop_share: 2.2},
+    // Add all districts
+  };
+
+  let geoLayer;
+
+  function getColor(value, metric){
+    // Collect all metric values for percentiles
+    const vals = Object.values(cropData).map(d => d[metric]).filter(v=>v!=null);
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
+    const ratio = (value - min) / (max - min);
+    // red -> yellow -> green gradient
+    return chroma.scale(['red','yellow','green'])(ratio).hex();
+  }
+
+  function style(feature, metric){
+    const name = feature.properties.adm2_name; // replace field name
+    const value = cropData[name]?.[metric] ?? 0;
+    return {
+      fillColor: getColor(value, metric),
+      weight: 1,
+      opacity: 1,
+      color: 'black',
+      dashArray: '1',
+      fillOpacity: 0.8
+    };
+  }
+
+  function onEachFeature(feature, layer){
+    const name = feature.properties.adm2_name;
+    const value = cropData[name]?.[metricSelect.value] ?? 0;
+    layer.bindTooltip(`<strong>${name}</strong><br>${metricSelect.options[metricSelect.selectedIndex].text}: ${value}`, {className:'my-tooltip'});
+  }
+
+  function updateMap(){
+    if(geoLayer) map.removeLayer(geoLayer);
+    geoLayer = L.geoJSON(geojson, {
+      style: f => style(f, metricSelect.value),
+      onEachFeature: onEachFeature
+    }).addTo(map);
+    geoLayer.eachLayer(layer => {
+      layer.bindTooltip(`<strong>${layer.feature.properties.adm2_name}</strong><br>${metricSelect.options[metricSelect.selectedIndex].text}: ${cropData[layer.feature.properties.adm2_name]?.[metricSelect.value] ?? 0}`, {className:'my-tooltip'});
     });
-}
+  }
 
-// Percentile color function
-function getPercentileColor(value, allValues){
-  allValues.sort((a,b)=>a-b);
-  const idx = allValues.findIndex(v=>v>=value);
-  const perc = idx/allValues.length;
-  const r = Math.floor(255*(1-perc));
-  const g = Math.floor(255*perc);
-  return `rgb(${r},${g},0)`;
-}
+  const metricSelect = document.getElementById('metricSelect');
+  metricSelect.addEventListener('change', updateMap);
 
-// Style function
-function styleDistrict(feature){
-  const crop = cropSelect.value;
-  const metric = metricSelect.value;
-  const district = feature.properties.adm2_name?.trim().toLowerCase();
-  const row = dataIndex[district]?.[crop];
-  let value = row ? parseFloat(row[metric])||0 : 0;
+  updateMap(); // initial map
 
-  const allValues = Object.values(dataIndex).map(d=>d[crop]?parseFloat(d[crop][metric]||0):0);
-  const fillColor = getPercentileColor(value, allValues);
-
-  return { fillColor: fillColor, weight:1, color:'white', fillOpacity:0.7 };
-}
-
-// Tooltip on hover
-function onEachFeature(feature, layer){
-  layer.on('mouseover', e=>{
-    const crop = cropSelect.value;
-    const district = feature.properties.adm2_name?.trim().toLowerCase();
-    const row = dataIndex[district]?.[crop];
-    let content = `<b>${feature.properties.adm2_name}</b><br>No data`;
-    if(row){
-      content=`<b>${row.District}</b><br>`;
-      Object.keys(row).filter(k=>k!=='District' && k!=='Crops Name').forEach(k=>{
-        content+=`${k}: ${row[k]}<br>`;
-      });
-    }
-    layer.bindTooltip(content,{sticky:true}).openTooltip();
-  });
-}
-
-// Update map on dropdown change
-cropSelect.addEventListener('change', updateMap);
-metricSelect.addEventListener('change', updateMap);
-function updateMap(){
-  if(!geojsonLayer) return;
-  geojsonLayer.eachLayer(layer=>layer.setStyle(styleDistrict(layer.feature)));
-}
+});
 </script>
 
 </body>
