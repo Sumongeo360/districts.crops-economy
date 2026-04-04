@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <title>Seasonal Crops Production Expenditure and Profit in Bangladesh</title>
 
+<!-- Leaflet CSS & JS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet-providers/leaflet-providers.js"></script>
@@ -11,150 +12,157 @@
 
 <style>
 html, body { margin:0; padding:0; height:100%; font-family:'Times New Roman', serif; }
-#topbar {
-  position:absolute; top:0; left:0; width:100%; z-index:1000;
-  background:rgba(255,255,255,0.95); padding:5px 10px; text-align:center;
-}
-#topbar h2 { margin:0; font-size:18px; color:red; }
-#dropdowns { margin-top:3px; display:flex; justify-content:center; gap:6px; }
-#dropdowns select { font-family:'Times New Roman'; font-size:14px; color:blue; padding:3px; }
+.row { width:100%; display:flex; }
+#topbar { flex-direction:column; align-items:center; justify-content:center; background:#fff; padding:5px; }
+#topbar h2 { margin:0; font-size:20px; color:red; }
+#dropdowns { display:flex; gap:8px; margin-top:3px; }
+#dropdowns select { padding:5px; font-family:'Times New Roman'; color:blue; }
+#maprow { flex:1; position:relative; }
 #map { width:100%; height:100%; }
-#sourceCredit {
-  position:absolute; bottom:5px; left:50%; transform:translateX(-50%);
-  font-size:12px; text-align:center; z-index:1000;
-}
-.district-label { font-family:'Times New Roman'; font-size:12.5px; text-align:center; pointer-events:none; }
+#credits { text-align:center; padding:5px; font-size:12px; }
+#credits a { margin:0 5px; color:blue; text-decoration:none; }
 </style>
 </head>
 
 <body>
 
-<div id="topbar">
+<div class="row" id="topbar">
   <h2>Seasonal Crops Production Expenditure and Profit in Bangladesh</h2>
   <div id="dropdowns">
-    <select id="cropSelect"></select>
-    <select id="metricSelect"></select>
+    <select id="cropSelect">
+      <option>Local Boro</option>
+      <option>Local Bona Aus</option>
+      <option>Local Ropa Aman</option>
+    </select>
+    <select id="metricSelect">
+      <option value="Cultivated area (Acres)">Cultivated Area (Acres)</option>
+      <option value="Yield rate (m. ton) per acre">Yield Rate (ton/acre)</option>
+      <option value="Expenditure per acre in Tk.">Expenditure (Tk./acre)</option>
+      <option value="Price of produced crops per acre (Tk.)">Price Produced (Tk./acre)</option>
+      <option value="Price of by- products per acre (Tk.)">Price By-products (Tk./acre)</option>
+      <option value="Profit per acre (Tk./acre)">Profit (Tk./acre)</option>
+      <option value="Total production (m. ton)">Total Production (ton)</option>
+      <option value="Crop share (m. ton/acre)">Crop Share (ton/acre)</option>
+    </select>
   </div>
 </div>
 
-<div id="map"></div>
+<div class="row" id="maprow">
+  <div id="map"></div>
+</div>
 
-<div id="sourceCredit">
-  Data source: <a href="https://objectstorage.ap-dcc-gazipur-1.oraclecloud15.com/n/axvjbnqprylg/b/V2Ministry/o/office-bbs/2024/12/c303b53b29864763ae8cf174fdb57a44.pdf" target="_blank">Agriculture Sample Census-2020</a> | 
+<div class="row" id="credits">
+  Data Source: <a href="https://objectstorage.ap-dcc-gazipur-1.oraclecloud15.com/n/axvjbnqprylg/b/V2Ministry/o/office-bbs/2024/12/c303b53b29864763ae8cf174fdb57a44.pdf" target="_blank">Agriculture Sample Census-2020</a> | 
   © <a href="https://www.linkedin.com/in/md-sumon-ali-992b91214/" target="_blank">Sumon</a>
 </div>
 
 <script>
-var map = L.map('map',{zoomControl:true}).setView([23.7,90.4],6);
+// Globals
+var map = L.map('map', { zoomControl: true }).setView([23.7, 90.4], 6);
+var geoLayer, selectedLayer = null;
+var cropSelect = document.getElementById('cropSelect');
+var metricSelect = document.getElementById('metricSelect');
+var dataIndex = {};
+var CSV_URL = "https://docs.google.com/spreadsheets/d/1lnnKF_oigj3TQl_N9BfIJJwviHktt3LzyW4UDMjHvxQ/gviz/tq?tqx=out:csv&gid=822582774";
 
-// Google Base Map
-var baseLayer = L.tileLayer('https://{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {subdomains:['mt0','mt1','mt2','mt3']}).addTo(map);
-var satelliteLayer = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {subdomains:['mt0','mt1','mt2','mt3']});
-L.control.layers({"Base Map":baseLayer,"Satellite":satelliteLayer},{},{position:'topright'}).addTo(map);
+// Base & Satellite layers
+var baseLayer = L.tileLayer.provider('Google.Normal.Map').addTo(map);
+var satLayer = L.tileLayer.provider('Esri.WorldImagery');
+var layerControl = L.control.layers({ Base: baseLayer, Satellite: satLayer }, null, { position: 'topright' }).addTo(map);
 
-var geoLayer, dataIndex={}, selectedLayer=null;
+// Zoom control top-left
+L.control.zoom({ position: 'topleft' }).addTo(map);
 
-const CSV_URL = "https://docs.google.com/spreadsheets/d/1lnnKF_oigj3TQl_N9BfIJJwviHktt3LzyW4UDMjHvxQ/gviz/tq?tqx=out:csv&gid=822582774";
-const cropSelect=document.getElementById('cropSelect');
-const metricSelect=document.getElementById('metricSelect');
-
-const metrics=[
-  "Cultivated area (Acres)",
-  "Yield rate (m. ton) per acre",
-  "Expenditure per acre in Tk.",
-  "Price of produced crops per acre (Tk.)",
-  "Price of by- products per acre (Tk.)",
-  "Profit per acre (Tk./acre)",
-  "Total production (m. ton)",
-  "Crop share (m. ton/acre)"
-];
-
-metrics.forEach(m=>{ metricSelect.innerHTML += `<option value="${m}">${m}</option>`; });
-
-// Percentile-based green→red gradient
-function getColor(v){
-  return v>1000?'#006400':v>500?'#32CD32':v>200?'#ADFF2F':v>100?'#FFFF00':v>50?'#FFA500':v>20?'#FF4500':'#FF0000';
-}
-
+// -------------------
 // Load CSV
-Papa.parse(CSV_URL,{download:true,header:true,skipEmptyLines:true,complete:function(results){
-  results.data.forEach(d=>{
+Papa.parse(CSV_URL, { download:true, header:true, skipEmptyLines:true, complete:function(results){
+  results.data.forEach(d => {
     var district = d.District?.trim().toLowerCase();
     var crop = d['Crops Name'];
-    if(!dataIndex[district]) dataIndex[district]={};
+    if(!dataIndex[district]) dataIndex[district] = {};
     dataIndex[district][crop] = d;
   });
-  // Populate crops dropdown
-  let crops = [...new Set(results.data.map(d=>d['Crops Name']).filter(Boolean))].sort();
-  cropSelect.innerHTML = crops.map(c=>`<option>${c}</option>`).join('');
   loadGeoJSON();
 }});
 
+// -------------------
 // Load GeoJSON
 function loadGeoJSON(){
   fetch('districts.geojson')
-    .then(r=>r.json())
-    .then(geojson=>{
-      geoLayer = L.geoJSON(geojson,{
-        style: styleDistrict,
-        onEachFeature: onEachFeature
-      }).addTo(map);
-
-      // District labels
-      geoLayer.eachLayer(function(layer){
-        var center = layer.getBounds().getCenter();
-        L.marker(center,{icon:L.divIcon({
-          className:'district-label',
-          html:layer.feature.properties.adm2_name,
-          iconAnchor:[0,0]
-        })}).addTo(map);
-      });
+    .then(r => r.json())
+    .then(geojson => {
+      geoLayer = L.geoJSON(geojson, { style: styleDistrict, onEachFeature: onEachFeature }).addTo(map);
     });
 }
 
+// -------------------
+// Color scale (green → red)
+function getColor(v){
+  return v > 1000 ? '#08519c' :
+         v > 500  ? '#3182bd' :
+         v > 200  ? '#6baed6' :
+         v > 100  ? '#9ecae1' :
+         v > 50   ? '#c6dbef' :
+                    '#eff3ff';
+}
+
+// -------------------
+// Style polygon
 function styleDistrict(feature){
   var crop = cropSelect.value;
   var metric = metricSelect.value;
   var district = feature.properties.adm2_name?.trim().toLowerCase();
   var row = dataIndex[district]?.[crop];
   var value = row ? parseFloat(row[metric]) || 0 : 0;
-  return { fillColor:getColor(value), weight:1, color:'white', fillOpacity:0.7 };
+  return { fillColor: getColor(value), weight:1, color:'white', fillOpacity:0.7 };
 }
 
+// -------------------
+// Tooltip & click
 function onEachFeature(feature, layer){
-  // Mouseover tooltip (column style)
-  layer.on('mouseover', function(){
+  layer.on('mouseover', function(e){
     var crop = cropSelect.value;
     var district = feature.properties.adm2_name?.trim().toLowerCase();
     var row = dataIndex[district]?.[crop];
-    var html = row ? `
-      <div style="font-size:13px; line-height:1.3; background-color:#ffdee1; padding:3px; border-radius:4px;">
-        <strong>${row.District}</strong><br>
-        Area: ${row['Cultivated area (Acres)']} Acre<br>
-        Yield: ${row['Yield rate (m. ton) per acre']} ton/acre<br>
-        Expenditure: ${row['Expenditure per acre in Tk.']} Tk<br>
-        Profit: ${row['Profit per acre (Tk./acre)']} Tk<br>
-        Production: ${row['Total production (m. ton)']} ton
+    var html = row ? 
+      `<div style="font-size:13px; background:#ffdee1; padding:3px; border-radius:4px; line-height:1.2;">
+      ${row.District} Area: ${row['Cultivated area (Acres)']} Acre<br>
+      Yield: ${row['Yield rate (m. ton) per acre']} ton/acre<br>
+      Expenditure: ${row['Expenditure per acre in Tk.']} Tk<br>
+      Profit: ${row['Profit per acre (Tk./acre)']} Tk<br>
+      Production: ${row['Total production (m. ton)']} ton
       </div>` : feature.properties.adm2_name;
 
-    layer.bindTooltip(html,{sticky:true,direction:'auto',opacity:1}).openTooltip();
+    layer.bindTooltip(html, { direction:'top', permanent:false, sticky:true, className:'custom-tooltip' }).openTooltip();
   });
 
   layer.on('mouseout', function(){ layer.closeTooltip(); });
 
-  // Click select polygon
   layer.on('click', function(){
-    if(selectedLayer) geoLayer.resetStyle(selectedLayer); // reset previous
-    layer.setStyle({color:'red', weight:3, fillOpacity:0.8}); // highlight selected polygon
-    layer.bringToFront(); // ensure outline visible on overlapping edges
+    if(selectedLayer) geoLayer.resetStyle(selectedLayer);
+    layer.setStyle({color:'red', weight:3, fillOpacity:0.8});
+    layer.bringToFront();
     selectedLayer = layer;
   });
+
+  // Add label always inside polygon
+  var center = layer.getBounds().getCenter();
+  L.marker(center, { 
+    icon: L.divIcon({ className:'district-label', html:feature.properties.adm2_name, iconAnchor:[0,0], style:'font-size:12.5px;' })
+  }).addTo(map);
 }
 
+// -------------------
 // Update map on dropdown change
-cropSelect.addEventListener('change', ()=>{ geoLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature))); });
-metricSelect.addEventListener('change', ()=>{ geoLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature))); });
+cropSelect.addEventListener('change', function(){ geoLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature))); });
+metricSelect.addEventListener('change', function(){ geoLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature))); });
 
 </script>
+
+<style>
+.custom-tooltip { background:#ffdee1; color:#000; font-family:'Times New Roman'; font-size:13px; border:none; box-shadow:0 0 2px #888; }
+.district-label { font-family:'Times New Roman'; font-size:12.5px; text-align:center; color:#000; pointer-events:none; }
+</style>
+
 </body>
 </html>
