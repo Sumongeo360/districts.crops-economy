@@ -23,9 +23,9 @@ html, body {margin:0; padding:0; height:100%; font-family:'Times New Roman', ser
   height:2%; display:flex; justify-content:center; align-items:center; font-size:12px; text-align:center;
 }
 .district-label {font-family:'Times New Roman'; font-size:12.5px; text-align:center; pointer-events:none;}
-.legend {position:absolute; bottom:10px; left:10px; background:white; padding:6px; border-radius:4px; font-size:12px; line-height:1.2; box-shadow:0 0 4px rgba(0,0,0,0.3);}
+.legend {position:absolute; bottom:10px; left:10px; background:white; padding:6px; border-radius:4px; font-size:12px; line-height:1.2; box-shadow:0 0 4px rgba(0,0,0,0.3); z-index:1000; max-width:300px;}
 .legend-title {font-weight:bold; margin-bottom:4px;}
-.legend-item {display:flex; align-items:center; gap:4px;}
+.legend-item {display:flex; align-items:center; gap:4px; margin-bottom:2px;}
 .legend-color {width:15px; height:15px; display:inline-block;}
 .north-arrow {position:absolute; top:10px; left:10px; width:40px; height:40px; background:url('https://upload.wikimedia.org/wikipedia/commons/e/e0/North_arrow.svg') no-repeat center center; background-size:contain; z-index:1000;}
 </style>
@@ -77,9 +77,13 @@ const metrics=[
 ];
 metrics.forEach(m=>metricSelect.innerHTML += `<option value="${m}">${m}</option>`);
 
-// Color scale
-function getColor(v){
-  return v>1000?'#006400':v>500?'#32CD32':v>200?'#ADFF2F':v>100?'#FFFF00':v>50?'#FFA500':v>20?'#FF4500':'#FF0000';
+// Helper: compute color
+function getColorScale(value, ranges){
+  if(value <= ranges[0]) return '#FF0000';
+  else if(value <= ranges[1]) return '#FF4500';
+  else if(value <= ranges[2]) return '#FFA500';
+  else if(value <= ranges[3]) return '#FFFF00';
+  else return '#32CD32';
 }
 
 // Load CSV
@@ -107,14 +111,15 @@ function loadGeoJSON(){
   });
 }
 
-// Style function
+// Style function with dynamic range
 function styleDistrict(feature){
   var crop = cropSelect.value;
   var metric = metricSelect.value;
   var district = feature.properties.adm2_name?.trim().toLowerCase();
   var row = dataIndex[district]?.[crop];
   var value = row ? parseFloat(row[metric])||0 : 0;
-  return {fillColor:getColor(value), weight:1, color:'white', fillOpacity:0.7};
+  let ranges = computeRanges(metric);
+  return {fillColor:getColorScale(value, ranges), weight:1, color:'white', fillOpacity:0.7};
 }
 
 // Tooltip & click
@@ -151,14 +156,31 @@ function onEachFeature(feature, layer){
 cropSelect.addEventListener('change',()=>{geoLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature))); updateLegend();});
 metricSelect.addEventListener('change',()=>{geoLayer.eachLayer(l=>l.setStyle(styleDistrict(l.feature))); updateLegend();});
 
-// Legend
+// Compute 5 ranges
+function computeRanges(metric){
+  let values=[];
+  for(let district in dataIndex){
+    let row = dataIndex[district][cropSelect.value];
+    if(row && row[metric]) values.push(parseFloat(row[metric]));
+  }
+  if(values.length===0) return [0,0,0,0,0];
+  let min=Math.min(...values), max=Math.max(...values);
+  let step=(max-min)/5;
+  return [min+step, min+2*step, min+3*step, min+4*step];
+}
+
+// Update legend
 function updateLegend(){
-  var metric = metricSelect.value;
-  var colors = ['#FF0000','#FF4500','#FFA500','#FFFF00','#ADFF2F','#32CD32','#006400'];
-  var labels = ['Very Low','Low','Moderate','High','Very High','Excellent','Top'];
-  var legendHtml = `<div class="legend-title">Legend + ${metric}</div>`;
-  for(let i=0;i<5;i++){ // show 5
-    legendHtml += `<div class="legend-item"><span class="legend-color" style="background:${colors[i]}"></span>${labels[i]}</div>`;
+  let metric = metricSelect.value;
+  let ranges = computeRanges(metric);
+  let colors = ['#FF0000','#FF4500','#FFA500','#FFFF00','#32CD32'];
+  let labels = ['Very Low','Low','Moderate','High','Very High'];
+  let legendHtml = `<div class="legend-title">Legend + ${metric}</div>`;
+  for(let i=0;i<5;i++){
+    let rangeText = i===0?`${ranges[i].toFixed(0)}`:
+                    i===4?`${ranges[i-1].toFixed(0)}-${ranges[i].toFixed(0)}`:
+                    `${i===1?ranges[i-1].toFixed(0):ranges[i-1].toFixed(0)}-${ranges[i].toFixed(0)}`;
+    legendHtml += `<div class="legend-item"><span class="legend-color" style="background:${colors[i]}"></span>${labels[i]} (${rangeText})</div>`;
   }
   document.getElementById('legend').innerHTML = legendHtml;
 }
