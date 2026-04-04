@@ -10,41 +10,29 @@
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
 <style>
-html, body {
-  margin:0; padding:0; height:100%; font-family:'Times New Roman', serif;
-}
-body {
-  display:flex;
-  flex-direction:column;
-  height:100vh;
-}
+html, body { margin:0; padding:0; height:100%; font-family:'Times New Roman', serif; }
+body { display:flex; flex-direction:column; height:100vh; }
 
 #topbar {
-  flex:0 0 10%; 
+  max-height:15%; min-height:60px;
   display:flex; flex-direction:column; justify-content:center; align-items:center;
-  text-align:center; padding:0.5vh 1vw;
+  text-align:center; padding:5px 1vw;
 }
-#topbar h2 { margin:0; font-size:1.8rem; color:red; }
+#topbar h2 { margin:0; font-size:1.8rem; color:red; text-align:center; }
 #dropdowns { margin-top:3px; display:flex; justify-content:center; gap:6px; flex-wrap:wrap; }
 #dropdowns select { font-family:'Times New Roman'; font-size:1rem; color:blue; padding:3px 6px; }
 
-#mapContainer {
-  flex:1 0 auto; 
-  position:relative; width:100%;
-}
+#mapContainer { flex:1; position:relative; width:100%; min-height:300px; }
 #map { width:100%; height:100%; }
 
-#sourceCredit {
-  flex:0 0 2%; font-size:0.8rem; line-height:2vh;
-  text-align:center;
-}
+#sourceCredit { flex:0 0 2%; font-size:0.8rem; text-align:center; }
 
 .district-label { font-family:'Times New Roman'; font-size:0.8rem; text-align:center; pointer-events:none; }
 
 #legend {
   position:absolute; bottom:5px; left:5px; z-index:1000;
-  background: rgba(255,255,255,0.9); padding:5px; border-radius:5px;
-  font-size:0.8rem; max-width:40vw;
+  background: rgba(255,255,255,0.95); padding:5px; border-radius:5px;
+  font-size:0.8rem; max-width:80vw; overflow:auto;
 }
 .legend-item { display:flex; align-items:center; margin-bottom:2px; }
 .legend-color { width:15px; height:15px; margin-right:5px; border:1px solid #333; }
@@ -55,10 +43,11 @@ body {
   background:url('https://upload.wikimedia.org/wikipedia/commons/3/36/North_arrow_04.svg') no-repeat center;
   background-size:contain;
 }
+
 @media (max-width:600px){
   #topbar h2 { font-size:4vw; }
   #dropdowns select { font-size:3.5vw; }
-  #legend { font-size:3vw; max-width:70vw; }
+  #legend { font-size:3vw; max-width:90vw; }
 }
 </style>
 </head>
@@ -108,27 +97,28 @@ metrics.forEach(m=>{ metricSelect.innerHTML += `<option value="${m}">${m}</optio
 
 const CSV_URL="https://docs.google.com/spreadsheets/d/1lnnKF_oigj3TQl_N9BfIJJwviHktt3LzyW4UDMjHvxQ/gviz/tq?tqx=out:csv&gid=822582774";
 
-Papa.parse(CSV_URL,{download:true,header:true,skipEmptyLines:true,complete:function(results){
-  results.data.forEach(d=>{
-    let district=d.District?.trim().toLowerCase();
-    let crop=d['Crops Name'];
-    if(!dataIndex[district]) dataIndex[district]={};
-    dataIndex[district][crop]=d;
-  });
-  let crops=[...new Set(results.data.map(d=>d['Crops Name']).filter(Boolean))].sort();
-  cropSelect.innerHTML=crops.map(c=>`<option>${c}</option>`).join('');
-  loadGeoJSON();
-}});
+Papa.parse(CSV_URL,{
+  download:true, header:true, skipEmptyLines:true,
+  complete:function(results){
+    results.data.forEach(d=>{
+      let district=d.District?.trim().toLowerCase();
+      let crop=d['Crops Name'];
+      if(!dataIndex[district]) dataIndex[district]={};
+      dataIndex[district][crop]=d;
+    });
+    let crops=[...new Set(results.data.map(d=>d['Crops Name']).filter(Boolean))].sort();
+    cropSelect.innerHTML=crops.map(c=>`<option>${c}</option>`).join('');
+    loadGeoJSON();
+  }
+});
 
 function loadGeoJSON(){
   fetch('districts.geojson').then(r=>r.json()).then(geojson=>{
     geoLayer=L.geoJSON(geojson,{style:styleDistrict,onEachFeature:onEachFeature}).addTo(map);
-
     geoLayer.eachLayer(layer=>{
       let center=layer.getBounds().getCenter();
       L.marker(center,{icon:L.divIcon({className:'district-label',html:layer.feature.properties.adm2_name,iconAnchor:[0,0]})}).addTo(map);
     });
-
     map.fitBounds(geoLayer.getBounds());
     updateLegend();
   });
@@ -170,11 +160,8 @@ function onEachFeature(feature,layer){
         Crop Share: ${row['Crop share (m. ton/acre)']} ton/acre
       </div>` : feature.properties.adm2_name;
 
-    layer.bindTooltip(html,{sticky:true,direction:'auto',opacity:1}).openTooltip();
+    layer.bindTooltip(html,{sticky:true,direction:'auto',opacity:1});
   });
-
-  layer.on('mouseout',()=>layer.closeTooltip());
-
   layer.on('click',function(){
     if(selectedLayer) geoLayer.resetStyle(selectedLayer);
     layer.setStyle({color:'blue', weight:3, fillOpacity:0.8});
@@ -200,7 +187,7 @@ function updateLegend(){
   let step=(max-min)/5;
   let breaks=[min, min+step, min+2*step, min+3*step, min+4*step, max];
   let labels=['Very Low','Low','Moderate','High','Very High'];
-  let html='<strong>'metric+'</strong><br>';
+  let html='<strong>' + metric + '</strong><br>';
   for(let i=0;i<5;i++){
     html+=`<div class="legend-item">
       <div class="legend-color" style="background-color:${getColor((breaks[i]+breaks[i+1])/2)}"></div>
