@@ -11,13 +11,18 @@
 
 <style>
 html, body {margin:0; padding:0; height:100%; font-family:'Times New Roman', serif;}
-#row1 {height:10%; display:flex; flex-direction:column; justify-content:center; align-items:center;}
+body {display:flex; flex-direction:column;}
+
+#row1 {flex:0 0 10%; display:flex; flex-direction:column; justify-content:center; align-items:center;}
 #title {color:red; font-size:22px; margin-bottom:4px;}
-#dropdowns {display:flex; gap:8px; font-family:'Times New Roman';}
+#dropdowns {display:flex; gap:8px;}
 #dropdowns select {color:blue; padding:4px; font-family:'Times New Roman';}
-#row2 {height:88%; position:relative;}
-#map {position:absolute; top:0; bottom:0; left:0; right:0;}
-#row3 {height:2%; display:flex; justify-content:center; align-items:center; font-size:12px;}
+
+#row2 {flex:1 0 88%; display:flex; position:relative;}
+#map {flex:1; width:100%; height:100%;}
+
+#row3 {flex:0 0 2%; display:flex; justify-content:center; align-items:center; font-size:12px;}
+
 .labelLayer {font-family:'Times New Roman'; font-size:12.5px; pointer-events:none; text-align:center;}
 </style>
 </head>
@@ -55,10 +60,10 @@ html, body {margin:0; padding:0; height:100%; font-family:'Times New Roman', ser
 <script>
 var map = L.map('map', {zoomControl:false}).setView([23.7,90.4],6);
 
-// Zoom control top-left
+// Zoom control top-left inside map
 L.control.zoom({position:'topleft'}).addTo(map);
 
-// Base & Satellite layers top-right
+// Base & Satellite layers top-right inside map
 var baseLayer = L.tileLayer.provider('Google.Normal.Map').addTo(map);
 var satLayer = L.tileLayer.provider('Esri.WorldImagery');
 L.control.layers({Base: baseLayer, Satellite: satLayer}, null, {position:'topright'}).addTo(map);
@@ -93,12 +98,12 @@ function loadGeoJSON(){
       onEachFeature: onEachFeature
     }).addTo(map);
     map.fitBounds(geoLayer.getBounds());
-    setTimeout(()=>map.invalidateSize(),100);
+    setTimeout(()=>map.invalidateSize(),200);
     addLabels();
   });
 }
 
-// Color scale (green→red)
+// Color scale
 function getColor(value){
   if(value===0) return '#ccebc5';
   if(value<=20) return '#a8ddb5';
@@ -121,7 +126,7 @@ function styleDistrict(feature){
 
 // Tooltip & selection
 function onEachFeature(feature, layer){
-  layer.on('mouseover', function(e){
+  layer.on('mouseover', function(){
     var crop = cropSelect.value;
     var district = feature.properties.adm2_name?.trim().toLowerCase();
     var row = dataIndex[district]?.[crop];
