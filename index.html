@@ -6,7 +6,6 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet-providers/leaflet-providers.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
 <style>
 html, body {margin:0; padding:0; height:100%; font-family:'Times New Roman', serif;}
@@ -32,7 +31,6 @@ html, body {margin:0; padding:0; height:100%; font-family:'Times New Roman', ser
 .legend-title {font-weight:bold; margin-bottom:2px;}
 .legend-item {display:flex; align-items:center; gap:6px; margin-bottom:2px;}
 .legend-color {width:20px; height:20px; display:inline-block;}
-}
 </style>
 </head>
 <body>
@@ -66,7 +64,6 @@ L.control.layers({"Base Map":baseLayer,"Satellite":satelliteLayer},{},{position:
 
 var geoLayer, dataIndex={}, selectedLayer=null;
 
-const CSV_URL = "https://docs.google.com/spreadsheets/d/1lnnKF_oigj3TQl_N9BfIJJwviHktt3LzyW4UDMjHvxQ/gviz/tq?tqx=out:csv&gid=822582774";
 const cropSelect=document.getElementById('cropSelect');
 const metricSelect=document.getElementById('metricSelect');
 
@@ -91,25 +88,30 @@ function getColorScale(value, breaks){
   else return '#32CD32';
 }
 
-// Load CSV
-Papa.parse(CSV_URL,{download:true,header:true,skipEmptyLines:true,complete:function(results){
-  results.data.forEach(d=>{
-    var district = d.District?.trim().toLowerCase();
-    var crop = d['Crops Name'];
-    if(!dataIndex[district]) dataIndex[district]={};
-    dataIndex[district][crop] = d;
+// ✅ JSON LOAD (replaces CSV)
+fetch('./Crops_Dashboard.json')
+  .then(res => res.json())
+  .then(data => {
+    dataIndex = data;
+
+    let cropsSet = new Set();
+    for(let d in data){
+      for(let crop in data[d]){
+        cropsSet.add(crop);
+      }
+    }
+
+    let crops = Array.from(cropsSet).sort();
+    cropSelect.innerHTML = crops.map(c=>`<option>${c}</option>`).join('');
+
+    loadGeoJSON();
   });
-  let crops = [...new Set(results.data.map(d=>d['Crops Name']).filter(Boolean))].sort();
-  cropSelect.innerHTML = crops.map(c=>`<option>${c}</option>`).join('');
-  loadGeoJSON();
-}});
 
 // Load GeoJSON and fit map to full BD
 function loadGeoJSON(){
   fetch('districts.geojson').then(r=>r.json()).then(geojson=>{
     geoLayer = L.geoJSON(geojson,{style:styleDistrict,onEachFeature:onEachFeature}).addTo(map);
 
-    // Fit map to show all districts
     map.fitBounds(geoLayer.getBounds());
 
     geoLayer.eachLayer(layer=>{
